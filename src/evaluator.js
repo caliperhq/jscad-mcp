@@ -5,6 +5,7 @@ const path = require('path')
 const crypto = require('crypto')
 const Module = require('module')
 const { measurements } = require('@jscad/modeling')
+const log = require('./logger.js')
 
 // Redirect @jscad/* imports in user files to the MCP server's own copies.
 // User project directories need no node_modules installation.
@@ -131,9 +132,14 @@ const evalCode = (code) => {
  * @returns {{ solids: object[], parts: Record<string,object[]>, bbox: object }}
  */
 const evaluate = (source) => {
-  if (source.file) return evalFile(source.file)
-  if (source.code !== undefined) return evalCode(source.code)
-  throw new Error('evaluate() requires either { file } or { code }')
+  try {
+    if (source.file) return evalFile(source.file)
+    if (source.code !== undefined) return evalCode(source.code)
+    throw new Error('evaluate() requires either { file } or { code }')
+  } catch (err) {
+    log.warn(`Evaluate failed: ${source.file || '(inline code)'}`, err)
+    throw err
+  }
 }
 
 module.exports = { evaluate }
