@@ -6,6 +6,7 @@ const path = require('path')
 const { evaluate } = require('./evaluator.js')
 const { serialize } = require('@jscad/stl-serializer')
 const { measurements: { measureAggregateBoundingBox } } = require('@jscad/modeling')
+const log = require('./logger.js')
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -51,9 +52,11 @@ const handleSse = (req, res) => {
   res.write('retry: 3000\n\n')
   if (lastEvent) res.write(`event: ${lastEvent.type}\ndata: ${JSON.stringify(lastEvent.data)}\n\n`)
   clients.push(res)
+  log.debug(`SSE client connected (total: ${clients.length})`)
   req.on('close', () => {
     const i = clients.indexOf(res)
     if (i >= 0) clients.splice(i, 1)
+    log.debug(`SSE client disconnected (total: ${clients.length})`)
   })
 }
 
@@ -65,7 +68,7 @@ const handleInfo = (req, res, cwd, port) => {
 const handleFiles = (req, res, url) => {
   const dir = url.searchParams.get('dir') || process.cwd()
   fs.readdir(dir, { withFileTypes: true }, (err, entries) => {
-    if (err) { res.writeHead(500); res.end(err.message); return }
+    if (err) { res._logError = err; res.writeHead(500); res.end(err.message); return }
     const items = entries
       .filter(e => e.isDirectory() || /\.(jscad|js)$/.test(e.name))
       .map(e => ({ name: e.name, type: e.isDirectory() ? 'dir' : 'file', path: path.join(dir, e.name) }))
@@ -88,6 +91,7 @@ const handleGeometry = (req, res, url) => {
     res.writeHead(200, { 'Content-Type': 'model/stl', 'Content-Length': buf.length })
     res.end(buf)
   } catch (err) {
+    res._logError = err
     res.writeHead(500); res.end(err.message)
   }
 }
@@ -111,6 +115,7 @@ const handleGeometryJson = (req, res, url) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(json))
   } catch (err) {
+    res._logError = err
     res.writeHead(500); res.end(err.message)
   }
 }
@@ -155,6 +160,7 @@ const handleParts = (req, res, url) => {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ parts: result, bbox }))
   } catch (err) {
+    res._logError = err
     res.writeHead(500); res.end(err.message)
   }
 }
@@ -239,6 +245,13 @@ const createWebServer = (cacheDir) => {
       const port = server.address().port
       const url = new URL(req.url, `http://127.0.0.1:${port}`)
       const { pathname } = url
+      const origWriteHead = res.writeHead.bind(res)
+      res.writeHead = (status, ...args) => {
+        if (status >= 500) log.crit(`${req.method} ${pathname} → ${status}`, res._logError)
+        else if (status >= 400) log.warn(`${req.method} ${pathname} → ${status}`)
+        else log.info(`${req.method} ${pathname} → ${status}`)
+        return origWriteHead(status, ...args)
+      }
 
       if (pathname === '/sse') return handleSse(req, res)
       if (pathname === '/api/info') return handleInfo(req, res, cwd, port)
