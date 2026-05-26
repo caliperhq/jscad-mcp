@@ -249,7 +249,7 @@ const createWebServer = (cacheDir) => {
       res.writeHead = (status, ...args) => {
         if (status >= 500) log.crit(`${req.method} ${pathname} → ${status}`, res._logError)
         else if (status >= 400) log.warn(`${req.method} ${pathname} → ${status}`)
-        else log.info(`${req.method} ${pathname} → ${status}`)
+        else log.debug(`${req.method} ${pathname} → ${status}`)
         return origWriteHead(status, ...args)
       }
 
