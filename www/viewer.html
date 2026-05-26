@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JSCAD Viewer</title>
+  <link rel="stylesheet" href="/viewer/css/demo.css">
+  <style>
+    body { height: 100%; min-height: 100%; min-width: 100%; margin: 0; font-family: 'Open Sans', sans-serif; }
+    #jscad { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="jscad"></div>
+  <script src="/viewer/dist/jscad-web.min.js"></script>
+  <script>
+    jscadWeb(document.getElementById('jscad'), { name: 'jscad1' })
+
+    let currentLabel = null
+
+    function applyLabel () {
+      if (!currentLabel) return
+      const el = document.querySelector('#designName h3')
+      if (el && el.textContent !== currentLabel) el.textContent = currentLabel
+    }
+
+    // Re-apply label whenever @jscad/web updates the DOM
+    new MutationObserver(applyLabel)
+      .observe(document.getElementById('jscad'), { childList: true, subtree: true })
+
+    function setLabel (label) {
+      currentLabel = label
+      applyLabel()
+    }
+
+    // Populate from ?label= when arriving via the "editor ↗" link
+    const params = new URLSearchParams(location.search)
+    const labelParam = params.get('label')
+    if (labelParam) setLabel(labelParam)
+
+    // Update label and navigate when MCP broadcasts a render
+    let cachedCwd = null
+    const es = new EventSource('/sse')
+    es.addEventListener('render', async (e) => {
+      const data = JSON.parse(e.data)
+      if (!data.file) return
+
+      if (!cachedCwd) {
+        const info = await fetch('/api/info').then(r => r.json())
+        cachedCwd = info.cwd
+      }
+      const rel = data.file.startsWith(cachedCwd + '/') ? data.file.slice(cachedCwd.length + 1) : data.file
+
+      // Navigate @jscad/web to the new file
+      const newUri = location.origin + '/api/source' + data.file
+      const current = new URLSearchParams(location.search).get('uri')
+      if (current !== newUri) {
+        location.href = location.pathname + '?uri=' + encodeURIComponent(newUri) + '&label=' + encodeURIComponent(rel)
+      } else {
+        setLabel(rel)
+      }
+    })
+  </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+{
+  "name": "jscad-mcp",
+  "version": "0.1.0-beta.1",
+  "description": "MCP server for OpenJSCAD — gives Claude visual and structural awareness of JSCAD models",
+  "main": "src/index.js",
+  "bin": {
+    "jscad-mcp": "src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [
+    "openjscad",
+    "jscad",
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "3d",
+    "cad",
+    "parametric"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/caliperhq/jscad-mcp"
+  },
+  "dependencies": {
+    "@jscad/array-utils": "^2.1.4",
+    "@jscad/img-utils": "^2.0.5",
+    "@jscad/modeling": "^2.13.0",
+    "@jscad/regl-renderer": "^2.6.15",
+    "@jscad/stl-serializer": "^2.1.23",
+    "@jscad/web": "^2.6.13",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "chokidar": "^3.5.3",
+    "gl": "^6.0.2",
+    "zod": "^3.23.8"
+  }
+}

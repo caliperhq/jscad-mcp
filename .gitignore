@@ -1,0 +1,4 @@
+node_modules/
+.jscad-cache/
+*.log
+.env

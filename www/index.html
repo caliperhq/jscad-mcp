@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jscad viewer</title>
+  <script>
+    (function() {
+      var stored = localStorage.getItem('jscad-viewer:theme')
+      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      document.documentElement.dataset.theme = stored || (prefersDark ? 'dark' : 'light')
+    })()
+  </script>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/regl/jscad-regl-renderer.min.js"></script>
+</head>
+<body>
+  <div id="titlebar">
+    <span class="logo">jscad</span>
+    <span id="active-file" class="dim">no file loaded</span>
+    <span id="solid-count" class="badge" style="display:none"></span>
+    <span id="part-count" class="badge blue" style="display:none"></span>
+    <a id="open-editor" class="editor-link dim" href="/viewer/" target="_blank" title="Open in JSCAD editor">editor ↗</a>
+    <span id="port-badge" class="port"></span>
+    <button type="button" id="theme-toggle" class="theme-toggle" title="Toggle light/dark mode" aria-label="Toggle light/dark mode">☾</button>
+  </div>
+
+  <div id="layout">
+    <div id="sidebar">
+      <div class="sidebar-section">
+        <div class="section-header">
+          <span class="section-label">Files</span>
+          <label class="hidden-toggle" title="Show hidden files">
+            <input type="checkbox" id="toggle-hidden"> .hidden
+          </label>
+        </div>
+        <div id="file-tree"></div>
+      </div>
+      <div class="sidebar-section" id="parts-panel" style="display:none">
+        <div class="section-label">Parts</div>
+        <div id="parts-list"></div>
+      </div>
+    </div>
+
+    <div id="viewer-col">
+      <div id="canvas-wrap">
+        <canvas id="viewer-canvas"></canvas>
+        <div id="labels-layer"></div>
+        <div id="live-indicator"><span class="pulse"></span>live</div>
+        <div id="controls-hint">drag · rotate<br>scroll · zoom<br>shift · pan</div>
+        <div id="view-toggles">
+          <label class="view-toggle"><input type="checkbox" id="toggle-grid"> grid</label>
+          <label class="view-toggle"><input type="checkbox" id="toggle-axis"> axis</label>
+        </div>
+        <div id="thumb-overlay" style="display:none">
+          <img id="overlay-img" src="">
+          <button id="overlay-close">✕</button>
+        </div>
+      </div>
+      <div id="thumb-strip"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
