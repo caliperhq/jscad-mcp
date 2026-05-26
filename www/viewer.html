@@ -14,7 +14,9 @@
   <div id="jscad"></div>
   <script src="/viewer/dist/jscad-web.min.js"></script>
   <script>
-    jscadWeb(document.getElementById('jscad'), { name: 'jscad1' })
+    // Unique name per tab so @jscad/web skips localStorage design restoration —
+    // without this it reads the previously saved design and overwrites the URI-loaded file.
+    jscadWeb(document.getElementById('jscad'), { name: 'jscad-' + Date.now() })
 
     let currentLabel = null
 
@@ -38,12 +40,26 @@
     const labelParam = params.get('label')
     if (labelParam) setLabel(labelParam)
 
+    // If opened with a specific ?uri=, don't let SSE navigate away from it
+    const openedWithUri = !!params.get('uri')
+
+    // @jscad/web runs setTimeout(()=>document.getElementById('example1-1').click(), 200)
+    // on every init. When we have a URI, intercept that click with a no-op stub so the
+    // URI-loaded design isn't overwritten by a built-in example after 200ms.
+    if (openedWithUri) {
+      const stub = document.createElement('a')
+      stub.id = 'example1-1'
+      stub.style.display = 'none'
+      document.body.insertBefore(stub, document.getElementById('jscad'))
+    }
+
     // Update label and navigate when MCP broadcasts a render
     let cachedCwd = null
     const es = new EventSource('/sse')
     es.addEventListener('render', async (e) => {
       const data = JSON.parse(e.data)
       if (!data.file) return
+      if (openedWithUri) return
 
       if (!cachedCwd) {
         const info = await fetch('/api/info').then(r => r.json())
