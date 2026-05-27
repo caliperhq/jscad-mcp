@@ -558,6 +558,81 @@ const { buildBlock } = block
 
 Node caches `@jscad/modeling` after the first call, so the per-call requires are fast. The bundler script (`scripts/bundle-engine.js` in `jscad-mcp-example`) reads each part file, strips its `'use strict'`/`module.exports`/internal `require('./...')` lines, and wraps the rest in this IIFE.
 
+**Regex-based bundler limitations** (the `bundle-examples.js` flavor that destructures lib exports into top-level consts):
+
+The bundler in `jscad-mcp-example` matches lib exports with a regex roughly equivalent to `module\.exports\s*=\s*\{([^}]*)\}` and matches consumer requires with `const\s+\{([^}]*)\}\s*=\s*require\('\.\/[^']+'\)`. Two consequences:
+
+1. **Lib exports must be `module.exports = { name1, name2, name3 }` on a single line of identifiers only.** Any of the following will silently break the bundle (the regex captures content with internal commas as if it were a destructure pattern):
+   - Multi-line `module.exports = {\n  w: 120,\n  values: [...]\n}`
+   - Inline complex values (`values: [1, 2, 3, ...]` — every array element becomes a phantom "exported name")
+   - Renamed exports (`module.exports = { width: w, height: h }`)
+
+   Pattern: declare values as `const` above, then export with shorthand identifiers:
+   ```js
+   const w = 120
+   const h = 150
+   const values = [/* ...18000 numbers... */]
+   module.exports = { w, h, values }
+   ```
+
+2. **The consumer file must use bare destructure names matching the lib's exports.** The bundler strips your `const { ... } = require('./lib/x')` line entirely and emits its own destructure with the lib's raw export names. So this **breaks**:
+   ```js
+   const { w: WIDTH, values: DATA } = require('./lib/heightmap')   // BUNDLER WILL EMIT { w, values } -- WIDTH/DATA undefined
+   ```
+   Use bare names and rebuild the object locally if you want a namespace:
+   ```js
+   const { w, h, values } = require('./lib/heightmap')
+   const heightmap = { w, h, values }
+   ```
+
+Symptom of either: bundled `.jscad` is much smaller than expected, or evaluating it throws `ReferenceError: X is not defined`. Inspect the bundled output's first few lines to see what destructure the bundler emitted.
+
+## Image → 3D Heightmap (Lithophane) Pattern
+
+For demos whose *input* is a raster image (lithophane, embossed plaque, terrain panel), the data has to be embedded in the JS bundle because `.jscad` files run sandboxed at render time and can't `fs.readFile` the source image. Use a two-step pipeline:
+
+**Step 1 — preprocessor script** (committed, run manually when the input changes):
+
+```js
+// scripts/build-heightmap.js  — node-only, zero deps beyond ImageMagick
+const fs = require('fs'), cp = require('child_process'), os = require('os')
+const [,, inputImage, widthArg = '120'] = process.argv
+const W = parseInt(widthArg, 10)
+const tmp = `${os.tmpdir()}/_hm_${process.pid}.pgm`
+cp.execFileSync('convert', [inputImage, '-colorspace', 'Gray', '-resize', `${W}x`, '-depth', '8', tmp])
+
+// PGM P5 (binary): "P5\n[# comment\n]*W H\n255\n<binary bytes>"
+const buf = fs.readFileSync(tmp)
+let p = 0
+const ws = (b) => b === 0x20 || b === 0x0a || b === 0x09 || b === 0x0d
+const tok = () => {
+  while (p < buf.length && ws(buf[p])) p++
+  if (buf[p] === 0x23) { while (p < buf.length && buf[p] !== 0x0a) p++; return tok() }
+  const s = p; while (p < buf.length && !ws(buf[p])) p++
+  return buf.slice(s, p).toString('ascii')
+}
+if (tok() !== 'P5') throw new Error('expected binary PGM')
+const ww = +tok(), hh = +tok(), maxv = +tok()
+if (maxv !== 255) throw new Error('expected 8-bit PGM')
+p++  // single whitespace after maxval
+const values = Array.from(buf.slice(p, p + ww * hh))
+fs.unlinkSync(tmp)
+
+// Emit a bundler-safe lib module (see "Regex-based bundler limitations" above)
+const out = `'use strict'
+const w = ${ww}
+const h = ${hh}
+const source = ${JSON.stringify(require('path').basename(inputImage))}
+const values = [${values.join(',')}]
+module.exports = { w, h, source, values }
+`
+fs.writeFileSync('examples/lib/heightmap.js', out)
+```
+
+ImageMagick's PGM P5 (binary grayscale) is the right intermediate: 8 bits per pixel, trivial header, no compression, parseable in ~15 lines without npm dependencies. (Modern `magick` CLI replaces `convert` — `convert` still works but prints a deprecation warning.)
+
+**Step 2 — polyhedron from heightmap** (in the `.jscad` file): see the "Polyhedron from heightmap grid" recipe in the `jscad` skill. Key constraint: at ~18k+ grid samples, do NOT try `union` of one cuboid per cell — boolean unions of thousands of primitives are pathologically slow. Build a single `polyhedron({ points, faces })` directly.
+
 ## Key Gotchas
 
 - **Legacy `CSG.cube` radius = HALF-EXTENTS**: `radius: [w/2, h/2, d/2]` → cube of size `w×h×d`
@@ -583,3 +658,6 @@ Node caches `@jscad/modeling` after the first call, so the per-call requires are
 - **Cutaway on a fully-assembled CSG is slow/fragile**: subtract the cutaway region from the housing alone, then union the interior parts. They sit inside naturally.
 - **Slider-crank piston Z drift**: piston position must be re-frame against TDC, not raw `r·cos(θ) + √(L²−(r·sin θ)²)`. Subtract `((r+L) − yp)` from the desired TDC crown Z.
 - **Bundling multi-file modules to a single file**: naive concatenation duplicates top-level `const { primitives } = require(...)`. Wrap each part body in an IIFE (see "Bundling Multi-File Models").
+- **Bundler regex eats internal commas**: a lib's `module.exports = { ..., values: [1,2,3,...] }` makes a regex-based bundler treat each array element as a destructure name. Lib exports must be a single line of identifiers — declare values as `const` above. See "Regex-based bundler limitations".
+- **Bundler can't rename in the consumer**: `const { w: WIDTH } = require('./lib/x')` breaks because the bundler emits its own destructure with the lib's raw names. Use bare names in the consumer file.
+- **Heightmap demo: per-cell cuboid + union is too slow**: 100×120 grid = 12k cuboids; `union()` of that many primitives is pathologically slow (CSG boolean per pair). Build one `polyhedron({ points, faces })` directly — see the recipe in the `jscad` skill.

@@ -153,6 +153,31 @@ This forces a fresh evaluation chain. Without it, multi-file iteration appears t
 
 Single-file `.jscad` files are not affected — the evaluator handles those correctly.
 
+**Same trap, different layer — lib data changes.** A single-file `.jscad` that `require`s a generated data module (e.g. `./lib/litho_heightmap.js`, a marching-cubes table, a pre-baked grid) hits *two* layers of caching when its lib changes:
+
+1. **The MCP's content-addressed PNG cache** is keyed on the input string (file content or inline-code text) + render params. If the entry file's text didn't change, it cache-hits and returns the previous render — even though the lib data on disk is new.
+2. **The require cache** is keyed on file path. Even on a PNG-cache miss, the JSCAD evaluator's `require('./lib/...')` returns the lib module loaded on the *previous* call.
+
+Defeat both by rendering via inline `code:` that (a) embeds a marker that differs from any previous render and (b) busts the require cache for the entry and its libs:
+
+```js
+'use strict'
+const path = require('path')
+const DIR = '/abs/path/to/examples'
+// HARNESS-LEVEL marker: change this string each call after regenerating
+// the lib (e.g. paste the lib's mtime or a counter). The MCP hashes this
+// source verbatim, so a literal change here forces a PNG-cache miss.
+// MARKER: 2026-05-27T14:48Z
+delete require.cache[path.join(DIR, 'lithophane.jscad')]
+delete require.cache[path.join(DIR, 'lib', 'litho_heightmap.js')]
+const mod = require(path.join(DIR, 'lithophane.jscad'))
+module.exports = { main: mod.main, parts: mod.parts }
+```
+
+Embedding the marker as a *runtime* value (`const m = fs.statSync(...).mtimeMs`) does NOT defeat the PNG cache — the cache hashes the source string, not what the source evaluates to. The marker must be a literal in the source the harness emits.
+
+The clue you've hit this: "I regenerated the heightmap / table / mesh, re-rendered the file or ran the same inline code again, and got the *exact same image*."
+
 ## Parameter Sweeps and Animation Frames
 
 The MCP tools don't accept user-defined parameters directly. To render a parameter sweep (e.g., 12 frames of a rotating crankshaft for a GIF), use inline `code:` that imports the model and calls `main` with the per-frame param:
@@ -201,6 +226,20 @@ const colorPart = (name, geom) => geom ? colorize(PART_COLORS[name], geom) : nul
 
 Translucent colors (alpha < 1) work for things like ports/voids that you want visible but not opaque.
 
+## Heightmap / Thin-Relief Surfaces Render as Blank
+
+A panel whose z variation is small relative to its xy extent — lithophanes, embossed plaques, terrain ribbons, anything that encodes information as surface relief — renders as a nearly featureless rectangle under the JSCAD renderer's diffuse lighting. From above, all surface normals point ≈ +Z and shading is uniform; from the side, only the silhouette of the edge profile is visible.
+
+This is **not a bug in your geometry** — verify via `list_parts` that the bbox z range is what you intended (e.g. 0.6 → 3.0 mm for a real lithophane). The geometry is correct; it's that the renderer can't show what backlighting reveals.
+
+To visualize relief in the render itself, use one of:
+
+- **Grazing-angle camera** (`elevation: 2–5°`): the top profile silhouette becomes the brightness scan across that row.
+- **Exaggerated relief** for the hero shot only: render with a much larger max thickness (`mod.main({ maxThickness: 15 })` instead of the printable `3`) so the diffuse shading reveals the encoded image. Be explicit in the doc caption that this view is amplified for visualization; the printable file ships at real thickness.
+- **A `slice`** perpendicular to the panel: shows the variable wall thickness directly. May be too thin to read at default zoom — zoom in or use a high `resolution`.
+
+Don't bump the printable defaults to make the render look better; ship the realistic thickness and use exaggerated renders only for documentation.
+
 ## Related Skills
 
 - **`jscad`** — code authoring reference: primitives, transforms, booleans, extrusions, parameters
@@ -219,6 +258,8 @@ Translucent colors (alpha < 1) work for things like ports/voids that you want vi
 | Reporting a render error as "done" | Evaluation errors return as text — check content type |
 | Calling `open_viewer` when viewer is already open | Renders auto-push via SSE; `open_viewer` is for the first open only |
 | Sub-module edits "have no effect" on a multi-file model | The MCP only busts the entry file's require cache. Use inline `code:` with `delete require.cache[...]` for each sub-module before re-rendering (see "Multi-file Projects and the Require-Cache Trap"). |
+| Regenerated a lib data module (heightmap, table, mesh) and got the *same* render back | Two cache layers at play. Inline `code:` with `delete require.cache[...]` AND a literal marker that varies between calls (a timestamped comment). See "Same trap, different layer — lib data changes". |
+| Heightmap / lithophane / embossed panel renders as a blank rectangle | Not a geometry bug — diffuse top-down rendering can't reveal small-z relief. Verify bbox z range with `list_parts`, then render at `elevation: 2–5°` (grazing) or with exaggerated thickness. See "Heightmap / Thin-Relief Surfaces Render as Blank". |
 | Trying to render a parameter sweep without per-frame `code:` | MCP tools don't accept geometry params. Wrap each frame in an inline code block that calls `mod.main({ <param>: value })` (see "Parameter Sweeps and Animation Frames"). |
 | Forgetting that `main` is called with `{}` | Bake defaults into `main` via `(params = {}) => { const p = { ...DEFAULTS, ...params }; ... }`. `getParameterDefinitions` only feeds the `@jscad/web` editor's UI. |
 | Assemblies look like a single blob | Apply per-part `colorize()` with distinctive RGBA. The renderer keeps per-solid colors when `overrideOriginalColors:false`. |

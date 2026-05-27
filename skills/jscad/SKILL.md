@@ -398,6 +398,81 @@ const capsule = (radius, length) =>
   )
 ```
 
+**Polyhedron from a heightmap grid** (lithophane, terrain, embossed panel): build one `polyhedron({ points, faces })` directly — *don't* `union` per-cell cuboids (a 100×120 grid is 12 000 cuboids, and CSG union pairs them sequentially → minutes, not seconds).
+
+```javascript
+const { primitives } = require('@jscad/modeling')
+const { polyhedron } = primitives
+
+// hm = { w, h, values: [0..255 grayscale, row-major, length w*h] }
+const buildPanel = (hm, { pixelSize = 1, minThickness = 0.6, maxThickness = 3 } = {}) => {
+  const { w: W, h: H, values } = hm
+  const px = pixelSize
+  const x0 = -(W * px) / 2, y0 = (H * px) / 2
+
+  // Average the up-to-four pixel cells touching corner (i, j) so the top
+  // surface is continuous across cell boundaries instead of stepped.
+  const cornerZ = (i, j) => {
+    let s = 0, n = 0
+    for (let dj = -1; dj <= 0; dj++) for (let di = -1; di <= 0; di++) {
+      const pi = i + di, pj = j + dj
+      if (pi >= 0 && pi < W && pj >= 0 && pj < H) { s += values[pj*W + pi]; n++ }
+    }
+    const b = n > 0 ? s / n : 128
+    return minThickness + (maxThickness - minThickness) * (1 - b / 255)
+  }
+
+  const points = []
+  // Top surface: (W+1) × (H+1) vertices, z varies
+  for (let j = 0; j <= H; j++)
+    for (let i = 0; i <= W; i++)
+      points.push([x0 + i*px, y0 - j*px, cornerZ(i, j)])
+  // Bottom surface: flat at z=0
+  const Vt = (W + 1) * (H + 1)
+  for (let j = 0; j <= H; j++)
+    for (let i = 0; i <= W; i++)
+      points.push([x0 + i*px, y0 - j*px, 0])
+
+  const Ti = (i, j) => j * (W + 1) + i           // top vertex index
+  const Bi = (i, j) => Vt + j * (W + 1) + i       // bottom vertex index
+  const faces = []
+
+  // Top (normal = +Z): CCW from +Z. Note y = y0 - j*px, so increasing j is -Y.
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    faces.push([Ti(i, j),   Ti(i+1, j), Ti(i+1, j+1)])
+    faces.push([Ti(i, j),   Ti(i+1, j+1), Ti(i, j+1)])
+  }
+  // Bottom (normal = -Z): reverse winding from top
+  for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) {
+    faces.push([Bi(i, j),   Bi(i+1, j+1), Bi(i+1, j)])
+    faces.push([Bi(i, j),   Bi(i, j+1),   Bi(i+1, j+1)])
+  }
+  // Side walls: four edge strips closing the volume
+  for (let i = 0; i < W; i++) {                                   // +Y edge (j=0)
+    faces.push([Ti(i, 0), Bi(i, 0), Bi(i+1, 0)])
+    faces.push([Ti(i, 0), Bi(i+1, 0), Ti(i+1, 0)])
+  }
+  for (let i = 0; i < W; i++) {                                   // -Y edge (j=H)
+    faces.push([Ti(i+1, H), Bi(i+1, H), Bi(i, H)])
+    faces.push([Ti(i+1, H), Bi(i, H), Ti(i, H)])
+  }
+  for (let j = 0; j < H; j++) {                                   // -X edge (i=0)
+    faces.push([Ti(0, j+1), Bi(0, j+1), Bi(0, j)])
+    faces.push([Ti(0, j+1), Bi(0, j), Ti(0, j)])
+  }
+  for (let j = 0; j < H; j++) {                                   // +X edge (i=W)
+    faces.push([Ti(W, j), Bi(W, j), Bi(W, j+1)])
+    faces.push([Ti(W, j), Bi(W, j+1), Ti(W, j+1)])
+  }
+
+  return polyhedron({ points, faces, orientation: 'outward' })
+}
+```
+
+A 120 × 150 grid produces ~36k vertices and ~70k triangles in one polyhedron — JSCAD handles it in well under a second. Winding direction: top faces CCW viewed from +Z, bottom faces reversed, side walls outward-facing. Get it wrong and the renderer shows inverted normals (the panel looks "inside-out"); flip the offending strip's winding.
+
+For the matching image → heightmap preprocessor (ImageMagick → PGM → JS data module), see the `jscad-examples` skill's "Image → 3D Heightmap (Lithophane) Pattern".
+
 ## Reference
 
 If the jscad MCP server is active (tools like `mcp__jscad__take_standard_views` appear in the deferred tools list), use **`jscad-mcp`** for visual feedback: render after every geometry change, describe what you see, iterate.
