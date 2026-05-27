@@ -177,6 +177,32 @@ const { cssColors } = jscad.colors
 colorize(cssColors.aqua, shape)     // cssColors.blue, .red, .maroon, .pink, etc.
 ```
 
+**Per-part palette pattern** — for assemblies where parts are easy to confuse (engines, gearboxes, machines with similar-shaped pieces), define a `PART_COLORS` map and colorize each part. Distinctive colors make assemblies self-explanatory without labels, and the jscad-mcp renderer honors per-solid colors:
+
+```javascript
+const { colors } = require('@jscad/modeling')
+const { colorize } = colors
+
+const PART_COLORS = {
+  block:        [0.55, 0.58, 0.62, 1],   // gray housing
+  piston:       [0.85, 0.55, 0.20, 1],   // copper
+  intake_valve: [0.30, 0.55, 0.85, 1],   // blue (cool intake)
+  exhaust_valve:[0.85, 0.30, 0.20, 1],   // red (hot exhaust)
+  intake_port:  [0.50, 0.75, 1.00, 0.55],// translucent (flow path)
+}
+
+const colorPart = (name, geom) => geom ? colorize(PART_COLORS[name], geom) : null
+
+// Then in buildAll:
+return {
+  block:  [colorPart('block',  buildBlock(p))].filter(Boolean),
+  piston: [colorPart('piston', buildPiston(p))].filter(Boolean),
+  // ...
+}
+```
+
+Translucent alpha (< 1) is useful for "void" parts like ports or cavities that should be visible but not opaque.
+
 ## Hulls and organic shapes
 
 ```javascript

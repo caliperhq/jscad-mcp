@@ -103,6 +103,95 @@ const main = () => cuboid({ size: [20, 20, 20] })
 module.exports = { main }
 ```
 
+The MCP calls `main({})` with no parameters — bake defaults into `main` so it works without a `getParameterDefinitions` UI:
+
+```js
+const DEFAULTS = { width: 20, height: 30 }
+const main = (params = {}) => {
+  const p = { ...DEFAULTS, ...params }
+  return cuboid({ size: [p.width, p.width, p.height] })
+}
+```
+
+`parts` is read as a static property at module load — precompute it with defaults:
+
+```js
+const buildAll = (params) => { /* returns { name: geom, ... } */ }
+const _defaultParts = buildAll({})
+module.exports = { main, parts: _defaultParts, getParameterDefinitions }
+```
+
+## Multi-file Projects and the Require-Cache Trap
+
+Multi-file models (entry file `require`s `./block`, `./head`, etc.) hit a Node.js gotcha when iterating with the MCP. The evaluator busts the require cache for the *entry* file only — its sub-modules stay cached across MCP calls. Editing `head.js` and re-rendering the entry won't pick up the change; the old cached `head.js` keeps running.
+
+**Symptom:** after a sub-module is updated, `main()` still returns the pre-update geometry (commonly: just the first/oldest module loads cleanly while later ones return `null` or stale shapes).
+
+**Fix:** when iterating on multi-file designs, render via the `code:` parameter with an inline cache-bust:
+
+```js
+'use strict'
+const path = require('path')
+const DIR = '/abs/path/to/your/demo'
+for (const f of ['block','head','piston','assembly']) {
+  delete require.cache[path.join(DIR, f + '.js')]
+}
+const mod = require(DIR + '/assembly.js')
+module.exports = { main: mod.main, parts: mod.parts }
+```
+
+This forces a fresh evaluation chain. Without it, multi-file iteration appears to silently ignore the user's edits.
+
+Single-file `.jscad` files are not affected — the evaluator handles those correctly.
+
+## Parameter Sweeps and Animation Frames
+
+The MCP tools don't accept user-defined parameters directly. To render a parameter sweep (e.g., 12 frames of a rotating crankshaft for a GIF), use inline `code:` that imports the model and calls `main` with the per-frame param:
+
+```js
+'use strict'
+const mod = require('/abs/path/to/assembly.js')
+const main = () => mod.main({ crankAngle: 120 })   // <-- the swept value
+module.exports = { main }
+```
+
+Run one MCP call per frame (parallel is safe — each call hashes by content). Cache files at `.jscad-cache/*.png` are content-addressed; copy the most-recent N out by mtime after the sweep completes:
+
+```bash
+ls -t .jscad-cache/*.png | head -N
+```
+
+For a smooth GIF, stitch with ffmpeg:
+
+```bash
+ffmpeg -y -framerate 8 -pattern_type glob -i 'frames/*.png' \
+       -vf 'scale=720:-1:flags=lanczos,palettegen=stats_mode=diff' /tmp/_p.png
+ffmpeg -y -framerate 8 -pattern_type glob -i 'frames/*.png' \
+       -i /tmp/_p.png -lavfi 'scale=720:-1:flags=lanczos [x]; [x][1:v] paletteuse=dither=bayer' \
+       out.gif
+```
+
+## Per-Part Coloring for Cutaways and Assemblies
+
+For multi-part assemblies, especially ones that look monochromatic from the outside (engines, gearboxes, pumps), apply `colors.colorize()` to each part. The renderer respects per-solid colors (`overrideOriginalColors: false`). Distinctive colors make assemblies self-explanatory without labels:
+
+```js
+const { colors } = require('@jscad/modeling')
+const { colorize } = colors
+
+const PART_COLORS = {
+  block: [0.55, 0.58, 0.62, 1],         // gray
+  piston: [0.85, 0.55, 0.20, 1],        // copper
+  intake_valve: [0.30, 0.55, 0.85, 1],  // blue
+  exhaust_valve: [0.85, 0.30, 0.20, 1], // red
+  intake_port: [0.50, 0.75, 1.00, 0.55],// translucent
+}
+
+const colorPart = (name, geom) => geom ? colorize(PART_COLORS[name], geom) : null
+```
+
+Translucent colors (alpha < 1) work for things like ports/voids that you want visible but not opaque.
+
 ## Related Skills
 
 - **`jscad`** — code authoring reference: primitives, transforms, booleans, extrusions, parameters
@@ -120,3 +209,7 @@ module.exports = { main }
 | Trying to describe a complex assembly by position | Use `label_parts` to get part names at screen positions first |
 | Reporting a render error as "done" | Evaluation errors return as text — check content type |
 | Calling `open_viewer` when viewer is already open | Renders auto-push via SSE; `open_viewer` is for the first open only |
+| Sub-module edits "have no effect" on a multi-file model | The MCP only busts the entry file's require cache. Use inline `code:` with `delete require.cache[...]` for each sub-module before re-rendering (see "Multi-file Projects and the Require-Cache Trap"). |
+| Trying to render a parameter sweep without per-frame `code:` | MCP tools don't accept geometry params. Wrap each frame in an inline code block that calls `mod.main({ <param>: value })` (see "Parameter Sweeps and Animation Frames"). |
+| Forgetting that `main` is called with `{}` | Bake defaults into `main` via `(params = {}) => { const p = { ...DEFAULTS, ...params }; ... }`. `getParameterDefinitions` only feeds the `@jscad/web` editor's UI. |
+| Assemblies look like a single blob | Apply per-part `colorize()` with distinctive RGBA. The renderer keeps per-solid colors when `overrideOriginalColors:false`. |
