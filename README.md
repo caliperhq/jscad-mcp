@@ -7,6 +7,8 @@
 [![Node](https://img.shields.io/node/v/@caliperhq/jscad-mcp)](https://nodejs.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+> Part of [**caliperhq**](https://caliperhq.dev) — open-source tools that give Claude senses for the things it builds.
+
 An MCP server that gives Claude visual and structural awareness of OpenJSCAD models. Renders `.jscad` files to PNG using the OpenJSCAD geometry kernel and returns images directly into Claude's context — closing the perception loop so Claude can see what it builds.
 
 A **live web viewer** runs alongside the server. Every render Claude produces is pushed to the viewer in real-time via SSE, so you always see exactly what Claude sees.
@@ -21,7 +23,7 @@ Engine crank-angle sweep — 12 frames stepping `crankAngle` 0° → 330°:
 
 ![engine crank-angle sweep](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/crank_sweep.gif)
 
-Full walkthroughs, iteration GIFs, and "Try in browser" links to openjscad.xyz live in **[caliperhq/jscad-mcp-example](https://github.com/caliperhq/jscad-mcp-example)**.
+Full walkthroughs, iteration GIFs, and "Try in browser" links to openjscad.xyz live in **[caliperhq/jscad-mcp-example](https://github.com/caliperhq/jscad-mcp-example)** — or browse the rich web gallery at **[caliperhq.dev/projects/jscad-mcp-example/gallery/](https://caliperhq.dev/projects/jscad-mcp-example/gallery/)**.
 
 ## Requirements
 
