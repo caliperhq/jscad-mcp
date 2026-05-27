@@ -24,7 +24,7 @@ No test suite or lint config is present. Verify changes by running `node src/ind
 
 ## Architecture
 
-Four source modules, a plain HTTP web server, and a static frontend (`www/`):
+Source modules, a plain HTTP web server, and a static frontend (`www/`):
 
 ```
 src/
@@ -33,6 +33,7 @@ src/
   renderer.js   — headless WebGL (gl npm package) → PNG via regl-renderer
   camera.js     — spherical → perspective camera matrix; STANDARD_VIEWS constant
   webserver.js  — HTTP server: SSE broadcast, REST API, static files
+  logger.js     — leveled logger (debug/info/warn/crit) writing to stderr
 www/
   index.html / app.js / style.css  — live viewer UI (file browser, 3D canvas, thumbnail strip)
   viewer.html   — embeds @jscad/web full editor
