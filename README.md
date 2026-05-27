@@ -4,6 +4,18 @@ An MCP server that gives Claude visual and structural awareness of OpenJSCAD mod
 
 A **live web viewer** runs alongside the server. Every render Claude produces is pushed to the viewer in real-time via SSE, so you always see exactly what Claude sees.
 
+## Gallery
+
+| Cycloidal drive | Engine cutaway | Gyroid lattice |
+|---|---|---|
+| [![cycloidal](docs/gallery/cycloidal_iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cycloidal-drive-reducer) | [![engine](docs/gallery/engine_slice_y.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cutaway-4-stroke-engine) | [![gyroid](docs/gallery/gyroid_iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#gyroid-lattice-cube) |
+
+Engine crank-angle sweep — 12 frames stepping `crankAngle` 0° → 330°:
+
+![engine crank-angle sweep](docs/gallery/crank_sweep.gif)
+
+Full walkthroughs, iteration GIFs, and "Try in browser" links to openjscad.xyz live in **[caliperhq/jscad-mcp-example](https://github.com/caliperhq/jscad-mcp-example)**.
+
 ## Requirements
 
 - **Node 18–22 recommended** (Node 24 requires an extra step — see below)
