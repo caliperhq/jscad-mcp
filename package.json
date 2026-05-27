@@ -1,6 +1,6 @@
 {
   "name": "@caliperhq/jscad-mcp",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "description": "MCP server for OpenJSCAD — gives Claude visual and structural awareness of JSCAD models",
   "main": "src/index.js",
   "bin": {
