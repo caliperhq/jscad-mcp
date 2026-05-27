@@ -52,6 +52,7 @@ let needFit = false
 let isDragging = false
 let lastPointer = { x: 0, y: 0 }
 let currentFile = null
+let userSelectedFile = false
 let cwd = ''
 let showHidden = localStorage.getItem('jscad-viewer:showHidden') === 'true'
 let partData = {}
@@ -386,6 +387,7 @@ async function renderDir (dir, container, depth) {
         e.stopPropagation()
         document.querySelectorAll('.tree-item.active').forEach(n => n.classList.remove('active'))
         el.classList.add('active')
+        userSelectedFile = true
         loadFile(item.path)
       })
     }
@@ -410,7 +412,7 @@ function initSse () {
     es.addEventListener('render', (e) => {
       const data = JSON.parse(e.data)
       addThumbnail(data)
-      if (data.file && data.file !== currentFile) loadFile(data.file)
+      if (data.file && data.file !== currentFile && !userSelectedFile) loadFile(data.file)
     })
     es.onopen = () => indicator.classList.remove('disconnected')
     es.onerror = () => {

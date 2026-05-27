@@ -12,6 +12,17 @@ const { renderToPng, WIDTH, HEIGHT } = require('./renderer.js')
 const { cameraFromAngles, STANDARD_VIEWS } = require('./camera.js')
 const { evaluate } = require('./evaluator.js')
 const { createWebServer } = require('./webserver.js')
+const log = require('./logger.js')
+
+process.on('uncaughtException', (err) => {
+  log.crit('Uncaught exception', err)
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason) => {
+  log.crit('Unhandled rejection', reason instanceof Error ? reason : new Error(String(reason)))
+  process.exit(1)
+})
 
 const server = new McpServer({
   name: 'jscad-mcp',
@@ -428,13 +439,14 @@ server.tool(
 async function main () {
   webServer = await createWebServer(cacheDir)
   const viewerUrl = `http://localhost:${webServer.port}/`
-  process.stderr.write(`jscad-mcp viewer: ${viewerUrl}\n`)
+  log.info(`jscad-mcp viewer: ${viewerUrl}`)
+  log.info(`Logging to ${log.logFile}`)
 
   const transport = new StdioServerTransport()
   await server.connect(transport)
 }
 
 main().catch((err) => {
-  process.stderr.write(`jscad-mcp fatal: ${err}\n`)
+  log.crit('jscad-mcp fatal startup error', err instanceof Error ? err : new Error(String(err)))
   process.exit(1)
 })
