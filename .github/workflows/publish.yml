@@ -36,4 +36,7 @@ jobs:
           fi
 
       - name: Publish
-        run: npm publish --provenance --access public
+        # --tag latest is explicit because npm 11+ refuses to default-tag a
+        # prerelease (e.g. 0.1.0-beta.1) without one. We want plain
+        # `npm install @caliperhq/jscad-mcp` to land on this beta.
+        run: npm publish --provenance --access public --tag latest
