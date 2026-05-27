@@ -415,6 +415,149 @@ Files with `//!OpenSCAD` header are OpenSCAD syntax, not JavaScript. The `scad-d
 
 OpenSCAD `difference()` = first child is positive, rest are subtracted. `scale([-1,1,1])` mirrors (negative factor). `eps = 0.001` scale trick prevents coplanar boolean artifacts.
 
+## Implicit Surfaces via Marching Cubes
+
+JSCAD has no built-in implicit-surface support, but `primitives.polyhedron({points, faces})` accepts arbitrary triangle meshes. Combined with a marching-cubes implementation, this unlocks gyroids, Schwarz P/D surfaces, and other triply-periodic minimal surfaces (TPMS).
+
+### The `|f|` kink trap
+
+To turn a signed implicit function `f(x,y,z)` (e.g., the gyroid `sin(x)cos(y) + sin(y)cos(z) + sin(z)cos(x)`) into a thickened solid (the region where `|f| < t`), the naive choice is to march `|f| - t` and pick iso-level 0. **This breaks marching cubes.** The `|.|` operator has a kink (non-differentiable point) along `f=0`. MC's linear edge interpolation assumes a smooth function; at the kink it picks wrong crossing points and produces non-manifold triangles. Visual symptom: the polyhedron renders as a solid cube or a chaotic triangle cloud rather than a coherent lattice.
+
+**Fix:** use `f(x,y,z)² - t²` instead. Same iso-surface (`|f| = t` ⇔ `f² = t²`), but smooth. MC produces a watertight mesh:
+
+```javascript
+const t = 0.6
+const field = (x, y, z) => {
+  const g = gyroidField(x, y, z, cellSize)
+  return g * g - t * t   // smooth replacement for |g| - t
+}
+```
+
+### Pattern: gyroid lattice cube
+
+```javascript
+const { primitives, booleans } = require('@jscad/modeling')
+const { polyhedron, cuboid } = primitives
+const { intersect } = booleans
+const { marchingCubes } = require('./lib/marching-cubes')   // standard MC with Paul Bourke tables
+
+const gyroidField = (x, y, z, cellSize) => {
+  const k = (2 * Math.PI) / cellSize
+  const X = x * k, Y = y * k, Z = z * k
+  return Math.sin(X) * Math.cos(Y) + Math.sin(Y) * Math.cos(Z) + Math.sin(Z) * Math.cos(X)
+}
+
+const main = (params = {}) => {
+  const p = { cellSize: 10, wallThreshold: 0.6, cubeSize: 40, resolution: 48, ...params }
+  const half = p.cubeSize / 2
+  const t = p.wallThreshold
+  const field = (x, y, z) => {
+    const g = gyroidField(x, y, z, p.cellSize)
+    return g * g - t * t
+  }
+
+  // March a slightly oversized box so we can clip cleanly with intersect
+  const pad = 2
+  const { positions, indices } = marchingCubes({
+    sampler: field,
+    bbox: [[-half - pad, -half - pad, -half - pad], [half + pad, half + pad, half + pad]],
+    resolution: p.resolution,
+    isoLevel: 0
+  })
+
+  if (positions.length === 0) return []
+  const lattice = polyhedron({ points: positions, faces: indices, orientation: 'outward' })
+  return intersect(lattice, cuboid({ size: [p.cubeSize, p.cubeSize, p.cubeSize] }))
+}
+```
+
+Use Paul Bourke's public-domain marching-cubes tables (`http://paulbourke.net/geometry/polygonise/`). Verify your implementation by marching a sphere (`f = √(x²+y²+z²) - 1`) and checking all vertices land near radius 1.
+
+## Cutaway Assembly Pattern (Multi-File Engine, Mechanism, etc.)
+
+For complex assemblies meant to show internals, do the cutaway subtraction **on the housing alone, not the assembled whole**. Cutting the assembled CSG of every part by a big slab is slow and can fail with intersecting geometry.
+
+```javascript
+// block.js — cutaway happens HERE, cheaply, on the housing alone
+const buildBlock = (p) => {
+  const body = cuboid({ size: [side, side, height] })
+  const bore = cylinder({ radius: bore/2, height: height + 2 })
+  const cutaway = translate([side/2 + 0.001, 0, 0],
+    cuboid({ size: [side/2 + 1, side + 2, height + 2] }))   // +X face removed
+  return subtract(body, union(bore, cutaway))
+}
+
+// piston.js, head.js, conrod.js, etc. — built whole; sit inside the cutaway naturally
+// assembly.js just unions everything via the parts map
+```
+
+The interior parts sit inside the already-cutaway housing. From any +X-side angle the camera sees right into the bore.
+
+## Slider-Crank Kinematics (For Animation Sweeps)
+
+Engine demos animate by sweeping `crankAngle`. The piston Z-position from crank angle:
+
+```javascript
+const r = stroke / 2
+const L = conrodLength
+const theta = (crankAngle * Math.PI) / 180
+const yp = r * Math.cos(theta) + Math.sqrt(L * L - (r * Math.sin(theta)) ** 2)
+// yp is the crown height above the crank center; subtract from TDC to get current z
+const crownZ = tdcCrownZ - ((r + L) - yp)
+```
+
+Crank pin position (for placing the conrod's big end):
+
+```javascript
+const pinY = r * Math.sin(theta)
+const pinZ = crankCenterZ + r * Math.cos(theta)
+```
+
+Sweep `crankAngle` 0° → 330° in 30° steps for a smooth 12-frame GIF.
+
+## Cycloidal Drive Profile
+
+The cycloidal disc profile (a hypocycloid that meshes with N pins on a circle) is bug-prone. Use the canonical Hugo-Elias form:
+
+```javascript
+// pinCount=N, pinCircleRadius=R, eccentricity=e, pinRadius=rp
+const cycloidProfile = ({ pinCount, pinCircleRadius, eccentricity, pinRadius, samples = 360 }) => {
+  const N = pinCount, R = pinCircleRadius, e = eccentricity, rp = pinRadius
+  const ratio = R / (e * N)
+  const pts = []
+  for (let i = 0; i < samples; i++) {
+    const t = (i / samples) * 2 * Math.PI
+    const psi = -Math.atan2(Math.sin((1 - N) * t), ratio - Math.cos((1 - N) * t))
+    const x =  R * Math.cos(t) - rp * Math.cos(t + psi) - e * Math.cos(N * t)
+    const y = -R * Math.sin(t) + rp * Math.sin(t + psi) + e * Math.sin(N * t)
+    pts.push([x, y])
+  }
+  return pts
+}
+```
+
+**Lobe count = N − 1** (a 12-pin housing produces an 11-lobe disc). If you get 22 lobes, you've used the wrong form (typically `cos(N·t/(N−1))` instead of `cos(N·t)`, or wrong sign on the `psi` term). Constraint: `e < R/N` to avoid self-intersection.
+
+Output-pin hole spacing matters too — the N−1 holes need to be far enough apart on their pitch circle to not overlap. If `2π·R_holes / (N−1) < 2·hole_radius`, they merge into a "flower" void instead of N−1 distinct bores.
+
+## Bundling Multi-File Models for Single-File Hosts
+
+`openjscad.xyz/?uri=<raw-github-url>` expects a single file. To ship a multi-file project as a browser demo, bundle the per-part modules into one file. Naive concatenation fails because each part file declares the same top-level `const { primitives, ... } = require('@jscad/modeling')` — duplicates cause `SyntaxError: Identifier 'primitives' has already been declared`.
+
+**Pattern:** wrap each per-part file body in an IIFE that re-requires `@jscad/modeling` locally and returns the module's exports object:
+
+```javascript
+const block = (() => {
+  const { primitives, booleans, transforms } = require('@jscad/modeling')
+  const { cuboid, cylinder } = primitives
+  // ... original block.js body ...
+  return { buildBlock }
+})()
+const { buildBlock } = block
+```
+
+Node caches `@jscad/modeling` after the first call, so the per-call requires are fast. The bundler script (`scripts/bundle-engine.js` in `jscad-mcp-example`) reads each part file, strips its `'use strict'`/`module.exports`/internal `require('./...')` lines, and wraps the rest in this IIFE.
+
 ## Key Gotchas
 
 - **Legacy `CSG.cube` radius = HALF-EXTENTS**: `radius: [w/2, h/2, d/2]` → cube of size `w×h×d`
@@ -433,3 +576,10 @@ OpenSCAD `difference()` = first child is positive, rest are subtracted. `scale([
 - **`module.exports = { main, getParameterDefinitions }`** — must export both or UI has no param panel
 - **`scale(scalar, geom)`** = uniform scale; `scale([sx,sy,sz], geom)` = non-uniform
 - **`roundRadius` on roundedCylinder** consumes from height — actual straight section = `height - 2*roundRadius`
+- **MC of `|f|-t` is broken**: kink at f=0 produces non-manifold triangles. Use `f²-t²` (same iso-surface, smooth field). See "Implicit Surfaces via Marching Cubes" above.
+- **Cycloidal disc lobe count = N-1, not N**: if rendering shows 2(N-1) lobes the `e·cos(N·t/(N-1))` term is wrong (should be `e·cos(N·t)`). Verify with a unit test that counts radial peaks.
+- **Cycloidal output-pin holes overlap into a "flower"** when their pitch circle is too tight: spacing `2π·R/(N-1)` must exceed `2·hole_radius`.
+- **Multi-part assemblies render as monochrome blobs** without `colorize`. Apply per-part RGBA before union/assembly. The renderer's `overrideOriginalColors:false` keeps your colors.
+- **Cutaway on a fully-assembled CSG is slow/fragile**: subtract the cutaway region from the housing alone, then union the interior parts. They sit inside naturally.
+- **Slider-crank piston Z drift**: piston position must be re-frame against TDC, not raw `r·cos(θ) + √(L²−(r·sin θ)²)`. Subtract `((r+L) − yp)` from the desired TDC crown Z.
+- **Bundling multi-file modules to a single file**: naive concatenation duplicates top-level `const { primitives } = require(...)`. Wrap each part body in an IIFE (see "Bundling Multi-File Models").
