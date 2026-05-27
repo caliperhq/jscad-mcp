@@ -46,12 +46,16 @@ const glToPng = (glCtx, width, height) => {
  *
  * @param {object[]} solids - geom3/geom2/path2 objects
  * @param {object} camera - camera state from cameraFromAngles()
- * @param {object[]} [highlightSolids] - if set, these render normally; all others render faded
- * @param {number} [width] - image width in pixels (default 800)
- * @param {number} [height] - image height in pixels (default 600)
+ * @param {object} [opts]
+ * @param {object[]|null} [opts.highlightSolids] - if set, these render normally; all others faded
+ * @param {number} [opts.width] - image width in pixels (default 800)
+ * @param {number} [opts.height] - image height in pixels (default 600)
+ * @param {boolean} [opts.showGrid] - render grid (default true)
+ * @param {boolean} [opts.showAxis] - render axis (default true)
  * @returns {Buffer} PNG bytes
  */
-const renderToPng = (solids, camera, highlightSolids = null, width = WIDTH, height = HEIGHT) => {
+const renderToPng = (solids, camera, opts = {}) => {
+  const { highlightSolids = null, width = WIDTH, height = HEIGHT, showGrid = true, showAxis = true } = opts
   const glCtx = getGl()
   if (resizeExt) resizeExt.resize(width, height)
 
@@ -90,8 +94,8 @@ const renderToPng = (solids, camera, highlightSolids = null, width = WIDTH, heig
     smoothNormals: true,
     overrideOriginalColors: false,
     entities: [
-      { visuals: { drawCmd: 'drawGrid', show: true }, size: [500, 500], ticks: [25, 5] },
-      { visuals: { drawCmd: 'drawAxis', show: true }, size: 300 },
+      { visuals: { drawCmd: 'drawGrid', show: showGrid }, size: [500, 500], ticks: [25, 5] },
+      { visuals: { drawCmd: 'drawAxis', show: showAxis }, size: 300 },
       ...entities
     ]
   }

@@ -11,6 +11,7 @@ const { z } = require('zod')
 const { renderToPng, WIDTH, HEIGHT } = require('./renderer.js')
 const { cameraFromAngles, STANDARD_VIEWS } = require('./camera.js')
 const { evaluate } = require('./evaluator.js')
+const { labelPng } = require('./labeler.js')
 const { createWebServer } = require('./webserver.js')
 const log = require('./logger.js')
 
@@ -95,6 +96,36 @@ const resolveSource = ({ file, code }) => {
 }
 
 // ---------------------------------------------------------------------------
+// Render options — shared schema + resolver used by all render tools
+// ---------------------------------------------------------------------------
+const RESOLUTION_PRESETS = {
+  thumbnail:       { width: 320,  height: 240  },
+  small:           { width: 480,  height: 360  },
+  normal:          { width: 800,  height: 600  },
+  large:           { width: 1280, height: 960  },
+  'high-quality':  { width: 1920, height: 1440 },
+}
+
+const renderOptionsSchema = {
+  resolution: z.enum(['thumbnail', 'small', 'normal', 'large', 'high-quality']).optional()
+    .describe('Named resolution preset (default: normal = 800×600). Explicit width/height override this.'),
+  width:    z.number().int().positive().optional().describe('Image width in pixels (overrides resolution preset)'),
+  height:   z.number().int().positive().optional().describe('Image height in pixels (overrides resolution preset)'),
+  showGrid: z.boolean().optional().describe('Render the reference grid (default: true)'),
+  showAxis: z.boolean().optional().describe('Render the X/Y/Z axis lines (default: true)'),
+}
+
+const resolveRenderOptions = ({ resolution, width, height, showGrid = true, showAxis = true } = {}) => {
+  const preset = RESOLUTION_PRESETS[resolution] ?? RESOLUTION_PRESETS.normal
+  return {
+    width:    width    ?? preset.width,
+    height:   height   ?? preset.height,
+    showGrid,
+    showAxis,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // echo — connection verification
 // ---------------------------------------------------------------------------
 server.tool(
@@ -112,16 +143,17 @@ server.tool(
 server.tool(
   'render_test',
   'Render a static test geometry (cube minus sphere) to verify the render pipeline works',
-  {},
-  async () => {
+  { ...renderOptionsSchema },
+  async (params) => {
+    const ro = resolveRenderOptions(params)
     const { primitives: { cube, sphere }, booleans: { subtract }, colors: { colorize } } = require('@jscad/modeling')
     const solid = colorize([0.3, 0.6, 1.0], subtract(cube({ size: 100 }), sphere({ radius: 65 })))
     const bbox = { min: [-50, -50, -50], max: [50, 50, 50] }
 
     const content = []
     for (const { name, azimuth, elevation } of STANDARD_VIEWS) {
-      const camera = cameraFromAngles(azimuth, elevation, bbox, WIDTH, HEIGHT)
-      const png = renderToPng([solid], camera)
+      const camera = cameraFromAngles(azimuth, elevation, bbox, ro.width, ro.height)
+      const png = renderToPng([solid], camera, ro)
       broadcastRender(png, { file: null, view: name })
       content.push({ type: 'text', text: `**${name}**` })
       content.push({ type: 'image', data: png.toString('base64'), mimeType: 'image/png' })
@@ -142,10 +174,9 @@ server.tool(
     elevation: z.number().describe('Degrees above horizon (0 = side view, 89 = top-down)'),
     zoom: z.number().optional().describe('Distance multiplier, default 1.0 (fits bounding box)'),
     target: z.array(z.number()).length(3).optional().describe('[x,y,z] look-at point, default = model center'),
-    width: z.number().int().positive().optional().describe('Image width in pixels (default 800)'),
-    height: z.number().int().positive().optional().describe('Image height in pixels (default 600)')
+    ...renderOptionsSchema
   },
-  async ({ file, code, azimuth, elevation, zoom = 1.0, target = null, width = WIDTH, height = HEIGHT }) => {
+  async ({ file, code, azimuth, elevation, zoom = 1.0, target = null, ...renderParams }) => {
     let result
     try {
       result = evaluate(resolveSource({ file, code }))
@@ -153,13 +184,14 @@ server.tool(
       return { content: [{ type: 'text', text: `Evaluation error: ${err.message}` }] }
     }
 
+    const ro = resolveRenderOptions(renderParams)
     const { solids, bbox } = result
-    const camera = cameraFromAngles(azimuth, elevation, bbox, width, height, zoom, target)
-    const png = renderToPng(solids, camera, null, width, height)
+    const camera = cameraFromAngles(azimuth, elevation, bbox, ro.width, ro.height, zoom, target)
+    const png = renderToPng(solids, camera, ro)
     broadcastRender(png, { file: file || null, view: 'custom', az: azimuth, el: elevation, zoom })
     return {
       content: [
-        { type: 'text', text: `az=${azimuth}° el=${elevation}° zoom=${zoom} size=${width}×${height}` },
+        { type: 'text', text: `az=${azimuth}° el=${elevation}° zoom=${zoom} size=${ro.width}×${ro.height}` },
         { type: 'image', data: png.toString('base64'), mimeType: 'image/png' }
       ]
     }
@@ -174,10 +206,9 @@ server.tool(
   'Render the JSCAD model from four standard viewpoints (iso, front, side, top) and return all four PNG images',
   {
     ...sourceSchema,
-    width: z.number().int().positive().optional().describe('Image width in pixels (default 800)'),
-    height: z.number().int().positive().optional().describe('Image height in pixels (default 600)')
+    ...renderOptionsSchema
   },
-  async ({ file, code, width = WIDTH, height = HEIGHT }) => {
+  async ({ file, code, ...renderParams }) => {
     let result
     try {
       result = evaluate(resolveSource({ file, code }))
@@ -185,11 +216,12 @@ server.tool(
       return { content: [{ type: 'text', text: `Evaluation error: ${err.message}` }] }
     }
 
+    const ro = resolveRenderOptions(renderParams)
     const { solids, bbox } = result
     const content = []
     for (const { name, azimuth, elevation } of STANDARD_VIEWS) {
-      const camera = cameraFromAngles(azimuth, elevation, bbox, width, height)
-      const png = renderToPng(solids, camera, null, width, height)
+      const camera = cameraFromAngles(azimuth, elevation, bbox, ro.width, ro.height)
+      const png = renderToPng(solids, camera, ro)
       broadcastRender(png, { file: file || null, view: name, az: azimuth, el: elevation })
       content.push({ type: 'text', text: `**${name}**` })
       content.push({ type: 'image', data: png.toString('base64'), mimeType: 'image/png' })
@@ -256,9 +288,10 @@ server.tool(
     ...sourceSchema,
     part: z.string().describe('Name of the part to highlight (must be in module.exports.parts)'),
     azimuth: z.number().optional().describe('Camera azimuth in degrees (default: 45 = iso)'),
-    elevation: z.number().optional().describe('Camera elevation in degrees (default: 35 = iso)')
+    elevation: z.number().optional().describe('Camera elevation in degrees (default: 35 = iso)'),
+    ...renderOptionsSchema
   },
-  async ({ file, code, part, azimuth = 45, elevation = 35 }) => {
+  async ({ file, code, part, azimuth = 45, elevation = 35, ...renderParams }) => {
     let result
     try {
       result = evaluate(resolveSource({ file, code }))
@@ -276,12 +309,13 @@ server.tool(
       return { content: [{ type: 'text', text: `Part "${part}" not found. ${hint}` }] }
     }
 
+    const ro = resolveRenderOptions(renderParams)
     // Build render list from parts so object identity is consistent with highlightSolids
     const allSolids = Object.values(parts).flat()
     const highlightSolids = parts[part]
     const renderSolids = allSolids.length > 0 ? allSolids : solids
-    const camera = cameraFromAngles(azimuth, elevation, bbox, WIDTH, HEIGHT)
-    const png = renderToPng(renderSolids, camera, highlightSolids)
+    const camera = cameraFromAngles(azimuth, elevation, bbox, ro.width, ro.height)
+    const png = renderToPng(renderSolids, camera, { ...ro, highlightSolids })
     broadcastRender(png, { file: file || null, view: 'highlight', part, az: azimuth, el: elevation })
 
     return {
@@ -302,9 +336,10 @@ server.tool(
   {
     ...sourceSchema,
     axis: z.enum(['x', 'y', 'z']).describe('Axis perpendicular to the cut plane'),
-    offset: z.number().optional().describe('Position along the axis to cut at (default: model center on that axis)')
+    offset: z.number().optional().describe('Position along the axis to cut at (default: model center on that axis)'),
+    ...renderOptionsSchema
   },
-  async ({ file, code, axis, offset }) => {
+  async ({ file, code, axis, offset, ...renderParams }) => {
     let result
     try {
       result = evaluate(resolveSource({ file, code }))
@@ -312,6 +347,7 @@ server.tool(
       return { content: [{ type: 'text', text: `Evaluation error: ${err.message}` }] }
     }
 
+    const ro = resolveRenderOptions(renderParams)
     const { solids, bbox } = result
     const axisIndex = { x: 0, y: 1, z: 2 }[axis]
     const cutOffset = offset !== undefined ? offset : (bbox.min[axisIndex] + bbox.max[axisIndex]) / 2
@@ -343,8 +379,8 @@ server.tool(
     // Camera perpendicular to the cut face
     const cameraAngles = { z: { azimuth: 0, elevation: 89 }, y: { azimuth: 0, elevation: 5 }, x: { azimuth: 90, elevation: 5 } }
     const { azimuth, elevation } = cameraAngles[axis]
-    const camera = cameraFromAngles(azimuth, elevation, bbox, WIDTH, HEIGHT)
-    const png = renderToPng(slicedSolids, camera)
+    const camera = cameraFromAngles(azimuth, elevation, bbox, ro.width, ro.height)
+    const png = renderToPng(slicedSolids, camera, ro)
     broadcastRender(png, { file: file || null, view: 'slice', axis, offset: cutOffset })
 
     return {
@@ -365,9 +401,10 @@ server.tool(
   {
     ...sourceSchema,
     azimuth: z.number().optional().describe('Camera azimuth in degrees (default: 45 = iso)'),
-    elevation: z.number().optional().describe('Camera elevation in degrees (default: 35 = iso)')
+    elevation: z.number().optional().describe('Camera elevation in degrees (default: 35 = iso)'),
+    ...renderOptionsSchema
   },
-  async ({ file, code, azimuth = 45, elevation = 35 }) => {
+  async ({ file, code, azimuth = 45, elevation = 35, ...renderParams }) => {
     let result
     try {
       result = evaluate(resolveSource({ file, code }))
@@ -375,12 +412,13 @@ server.tool(
       return { content: [{ type: 'text', text: `Evaluation error: ${err.message}` }] }
     }
 
+    const ro = resolveRenderOptions(renderParams)
     const { solids, parts, bbox } = result
     const partNames = Object.keys(parts)
 
     if (partNames.length === 0) {
-      const camera = cameraFromAngles(azimuth, elevation, bbox, WIDTH, HEIGHT)
-      const png = renderToPng(solids, camera)
+      const camera = cameraFromAngles(azimuth, elevation, bbox, ro.width, ro.height)
+      const png = renderToPng(solids, camera, ro)
       broadcastRender(png, { file: file || null, view: 'labels', az: azimuth, el: elevation })
       return {
         content: [
@@ -391,12 +429,12 @@ server.tool(
     }
 
     const { measurements: { measureAggregateBoundingBox } } = require('@jscad/modeling')
-    const camera = cameraFromAngles(azimuth, elevation, bbox, WIDTH, HEIGHT)
+    const camera = cameraFromAngles(azimuth, elevation, bbox, ro.width, ro.height)
     const allSolids = Object.values(parts).flat()
-    const png = renderToPng(allSolids, camera)
-    broadcastRender(png, { file: file || null, view: 'labels', az: azimuth, el: elevation })
+    const png = renderToPng(allSolids, camera, ro)
 
-    const lines = [`Image is ${WIDTH}×${HEIGHT}px (origin top-left). Part centroids:`]
+    const lines = [`Image is ${ro.width}×${ro.height}px (origin top-left). Part centroids:`]
+    const labelList = []
     for (const name of partNames) {
       const partSolids = parts[name]
       let centroid
@@ -406,15 +444,20 @@ server.tool(
       } catch {
         centroid = [(bbox.min[0] + bbox.max[0]) / 2, (bbox.min[1] + bbox.max[1]) / 2, (bbox.min[2] + bbox.max[2]) / 2]
       }
-      const pos = projectToScreen(centroid, camera, WIDTH, HEIGHT)
+      const pos = projectToScreen(centroid, camera, ro.width, ro.height)
       const posStr = pos ? `~(${pos[0]}, ${pos[1]})` : '(behind camera)'
       lines.push(`  ${name}: ${posStr}`)
+      if (pos) labelList.push({ x: pos[0], y: pos[1], text: name })
     }
+
+    const labelScale = Math.max(1, Math.round(ro.width / 400))
+    const labelledPng = labelList.length > 0 ? labelPng(png, labelList, labelScale) : png
+    broadcastRender(labelledPng, { file: file || null, view: 'labels', az: azimuth, el: elevation })
 
     return {
       content: [
         { type: 'text', text: lines.join('\n') },
-        { type: 'image', data: png.toString('base64'), mimeType: 'image/png' }
+        { type: 'image', data: labelledPng.toString('base64'), mimeType: 'image/png' }
       ]
     }
   }

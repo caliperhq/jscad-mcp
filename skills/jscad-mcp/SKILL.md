@@ -47,11 +47,20 @@ Skip for: variable renames, comment edits, refactors that don't affect geometry 
 
 All render tools accept either `file` (absolute path to a `.jscad`) or `code` (inline JSCAD source string).
 
-`take_image` and `take_standard_views` accept optional `width`/`height` (pixels, default 800×600). Use larger sizes for detail work.
+**Render options** — every render tool accepts these optional parameters:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `resolution` | `normal` | Named preset: `thumbnail` (320×240), `small` (480×360), `normal` (800×600), `large` (1280×960), `high-quality` (1920×1440) |
+| `width` / `height` | — | Explicit pixel size — overrides `resolution` if both are given |
+| `showGrid` | `true` | Show the reference grid |
+| `showAxis` | `true` | Show the X/Y/Z axis lines |
+
+Use `thumbnail` for quick checks during iteration; `large` or `high-quality` for detail inspection or final review. Set `showGrid: false` for clean export-style renders.
 
 `slice` takes `axis` (x/y/z) and optional `offset` (default: model center on that axis). Shows the negative side of the cut; camera auto-orients perpendicular to the cut face.
 
-`label_parts` renders the model and returns a legend with each part name and its approximate pixel position — use this before `highlight` when you need to orient yourself in a complex assembly.
+`label_parts` renders the model with part names drawn directly on the image at each part's centroid, and also returns a text legend with pixel coordinates. Use this before `highlight` when you need to orient yourself in a complex assembly.
 
 ## Web Viewer
 
