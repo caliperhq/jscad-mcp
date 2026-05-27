@@ -1,5 +1,12 @@
 # jscad-mcp
 
+[![npm](https://img.shields.io/npm/v/@caliperhq/jscad-mcp?logo=npm)](https://www.npmjs.com/package/@caliperhq/jscad-mcp)
+[![downloads](https://img.shields.io/npm/dm/@caliperhq/jscad-mcp)](https://www.npmjs.com/package/@caliperhq/jscad-mcp)
+[![CI](https://github.com/caliperhq/jscad-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/caliperhq/jscad-mcp/actions/workflows/ci.yml)
+[![provenance](https://img.shields.io/badge/provenance-signed-success?logo=sigstore)](https://www.npmjs.com/package/@caliperhq/jscad-mcp)
+[![Node](https://img.shields.io/node/v/@caliperhq/jscad-mcp)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 An MCP server that gives Claude visual and structural awareness of OpenJSCAD models. Renders `.jscad` files to PNG using the OpenJSCAD geometry kernel and returns images directly into Claude's context — closing the perception loop so Claude can see what it builds.
 
 A **live web viewer** runs alongside the server. Every render Claude produces is pushed to the viewer in real-time via SSE, so you always see exactly what Claude sees.
