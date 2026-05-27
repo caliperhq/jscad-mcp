@@ -252,22 +252,26 @@ function clearLabels () {
 }
 
 function updateLabels () {
-  if (!camera.projectionView) return
+  if (!camera.projection || !camera.view) return
   const wrap = document.getElementById('canvas-wrap')
   const W = wrap.clientWidth
   const H = wrap.clientHeight
-  const m = camera.projectionView
+  const v = camera.view
+  const p = camera.projection
   for (const [name, div] of Object.entries(labelDivs)) {
     const d = partData[name]
     if (!d || !d.centroid) { div.style.display = 'none'; continue }
     const [cx, cy, cz] = d.centroid
-    // Column-major mat4 × vec4
-    const x = m[0] * cx + m[4] * cy + m[8] * cz + m[12]
-    const y = m[1] * cx + m[5] * cy + m[9] * cz + m[13]
-    const w = m[3] * cx + m[7] * cy + m[11] * cz + m[15]
-    if (w <= 0) { div.style.display = 'none'; continue }
-    const sx = (x / w + 1) / 2 * W
-    const sy = (-y / w + 1) / 2 * H
+    // Column-major mat4: view transform then projection
+    const vx = v[0]*cx + v[4]*cy + v[8]*cz + v[12]
+    const vy = v[1]*cx + v[5]*cy + v[9]*cz + v[13]
+    const vz = v[2]*cx + v[6]*cy + v[10]*cz + v[14]
+    const rx = p[0]*vx + p[4]*vy + p[8]*vz + p[12]
+    const ry = p[1]*vx + p[5]*vy + p[9]*vz + p[13]
+    const rw = p[3]*vx + p[7]*vy + p[11]*vz + p[15]
+    if (rw <= 0) { div.style.display = 'none'; continue }
+    const sx = (rx / rw + 1) / 2 * W
+    const sy = (-ry / rw + 1) / 2 * H
     div.style.display = ''
     div.style.left = sx + 'px'
     div.style.top = sy + 'px'
