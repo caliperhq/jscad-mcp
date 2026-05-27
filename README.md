@@ -8,11 +8,11 @@ A **live web viewer** runs alongside the server. Every render Claude produces is
 
 | Cycloidal drive | Engine cutaway | Gyroid lattice |
 |---|---|---|
-| [![cycloidal](docs/gallery/cycloidal_iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cycloidal-drive-reducer) | [![engine](docs/gallery/engine_slice_y.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cutaway-4-stroke-engine) | [![gyroid](docs/gallery/gyroid_iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#gyroid-lattice-cube) |
+| [![cycloidal](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/cycloidal_iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cycloidal-drive-reducer) | [![engine](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/engine_slice_y.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cutaway-4-stroke-engine) | [![gyroid](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/gyroid_iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#gyroid-lattice-cube) |
 
 Engine crank-angle sweep — 12 frames stepping `crankAngle` 0° → 330°:
 
-![engine crank-angle sweep](docs/gallery/crank_sweep.gif)
+![engine crank-angle sweep](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/crank_sweep.gif)
 
 Full walkthroughs, iteration GIFs, and "Try in browser" links to openjscad.xyz live in **[caliperhq/jscad-mcp-example](https://github.com/caliperhq/jscad-mcp-example)**.
 
@@ -38,13 +38,13 @@ xcode-select --install
 ## Installation
 
 ```bash
-npm install -g jscad-mcp
+npm install -g @caliperhq/jscad-mcp
 ```
 
 Or run without installing:
 
 ```bash
-npx jscad-mcp
+npx @caliperhq/jscad-mcp
 ```
 
 ### Node 24 note
@@ -52,8 +52,8 @@ npx jscad-mcp
 headless-gl 6.x does not compile on Node 24 with GCC 14+ due to a missing `#include <cstdint>` in the ANGLE library. If you're on Node 24, either use [nvm](https://github.com/nvm-sh/nvm) to switch to Node 20 LTS for the install step, or manually build headless-gl after install:
 
 ```bash
-npm install -g jscad-mcp
-cd $(npm root -g)/jscad-mcp
+npm install -g @caliperhq/jscad-mcp
+cd $(npm root -g)/@caliperhq/jscad-mcp
 # patch and rebuild gl:
 sed -i 's/#include <vector>/#include <vector>\n#include <cstdint>/' node_modules/gl/angle/src/common/angleutils.h
 npm rebuild gl
@@ -105,12 +105,15 @@ Install the Claude Code skills for the best experience — they teach Claude the
 
 ```bash
 SKILLS_DIR="$HOME/.claude/skills"
+PKG_DIR="$(npm root -g)/@caliperhq/jscad-mcp"
 mkdir -p "$SKILLS_DIR"
-cp -r skills/jscad-mcp     "$SKILLS_DIR/"
-cp -r skills/jscad          "$SKILLS_DIR/"
-cp -r skills/jscad-wiki     "$SKILLS_DIR/"
-cp -r skills/jscad-examples "$SKILLS_DIR/"
+cp -r "$PKG_DIR/skills/jscad-mcp"     "$SKILLS_DIR/"
+cp -r "$PKG_DIR/skills/jscad"         "$SKILLS_DIR/"
+cp -r "$PKG_DIR/skills/jscad-wiki"    "$SKILLS_DIR/"
+cp -r "$PKG_DIR/skills/jscad-examples" "$SKILLS_DIR/"
 ```
+
+If you cloned the repo directly, run the same commands from the repo root with `PKG_DIR=.` instead.
 
 See [`skills/README.md`](skills/README.md) for details.
 
@@ -181,6 +184,8 @@ module.exports = {
 ## Examples
 
 The `examples/` directory contains ready-to-open `.jscad` files demonstrating various features: gears, threads, hinges, parametric boxes, and more. Open them in the web viewer file browser or pass them to any render tool.
+
+For longer walkthroughs — cycloidal drive, cutaway 4-stroke engine, gyroid lattice — with iteration GIFs and commentary, see [caliperhq/jscad-mcp-example](https://github.com/caliperhq/jscad-mcp-example).
 
 ## How it works
 

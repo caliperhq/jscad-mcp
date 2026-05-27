@@ -2,3 +2,7 @@ node_modules/
 .jscad-cache/
 *.log
 .env
+.playwright-mcp/
+.superpowers/
+docs/superpowers/
+TODO.md
