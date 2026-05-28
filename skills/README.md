@@ -6,10 +6,10 @@ These skills teach Claude how to work with JSCAD models and the jscad-mcp server
 
 | Skill | Description |
 |-------|-------------|
-| `jscad-mcp` | Core workflow: render → describe → compare → fix loop. Required for using the MCP server effectively. |
+| `jscad-mcp` | Core workflow: render → describe → compare → fix loop. Required for using the MCP server effectively. Includes multi-angle inspection principles ("one angle is one hypothesis") drawn from the engine demo's four-round iteration. |
 | `jscad` | Code authoring reference: primitives, transforms, booleans, extrusions, parametric UI. |
 | `jscad-wiki` | Full API documentation for `@jscad/modeling`. |
-| `jscad-examples` | Real-world patterns from working designs (gears, threads, hinges, etc.). |
+| `jscad-examples` | Real-world patterns from working designs (gears, threads, hinges, etc.). The SKILL.md is the broad index; topical deep-dives live under `references/` (marching cubes, cycloidal drives, engine cutaways + slider-crank, multi-file bundling, lithophane pipeline, HO-scale models). |
 
 ## Installation
 

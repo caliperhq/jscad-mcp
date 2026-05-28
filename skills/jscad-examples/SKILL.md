@@ -3,13 +3,30 @@ name: jscad-examples
 description: >
   Load this skill when answering questions about real-world JSCAD patterns,
   code idioms, or how to implement specific 3D modeling techniques. Covers
-  patterns extracted from 46 working JSCAD examples: composition strategies,
-  parametric design, tolerance/fit, threading, gears, shell construction,
-  text embedding, rotational symmetry, organic extrusion, and mesh import.
-  Also covers API version differences (legacy CSG vs modern @jscad/modeling).
+  patterns extracted from 46 working JSCAD examples plus the jscad-mcp
+  demo gallery: composition strategies, parametric design, tolerance/fit,
+  threading, gears, shell construction, text embedding, rotational
+  symmetry, organic extrusion, and mesh import. Also covers API version
+  differences (legacy CSG vs modern @jscad/modeling). Topical deep-dives
+  live under references/.
 ---
 
-# JSCAD Real-World Patterns (from 46 Examples)
+# JSCAD Real-World Patterns
+
+## Topical references
+
+Deep-dives on patterns that are long enough to warrant their own files. Load the one matching your task:
+
+| File | When to load |
+|------|--------------|
+| [`references/marching-cubes.md`](references/marching-cubes.md) | Implicit surfaces, gyroids, Schwarz P/D, any TPMS. Covers the `\|f\|` kink trap and the `f² - t²` fix. |
+| [`references/cycloidal-drive.md`](references/cycloidal-drive.md) | Hypocycloid disc profile (Hugo-Elias form), lobe-count check, output-pin hole spacing. |
+| [`references/engine-and-kinematics.md`](references/engine-and-kinematics.md) | Cutaway-on-the-housing pattern, slider-crank piston/conrod math, crankshaft anatomy (journal split, webs, counterweights). |
+| [`references/bundling.md`](references/bundling.md) | IIFE-wrap multi-file bundling for openjscad.xyz, regex-bundler constraints (single-line exports, bare destructure names). |
+| [`references/lithophane.md`](references/lithophane.md) | Image → grayscale heightmap → polyhedron pipeline. Why a 18k-cell `union` is too slow; how to render thin-relief geometry. |
+| [`references/ho-scale-models.md`](references/ho-scale-models.md) | HO-scale sizing, the `segments:` stave trick, Pratt diagonal rule, parallel-slash sign convention, parametric panel tiling. |
+
+The rest of this file covers the broad patterns that come up across most JSCAD work.
 
 ## API Version Quick Reference
 
@@ -353,6 +370,7 @@ return layers
 ```
 
 ## Wings 3D / Mesh Import Pattern
+
 When importing a pre-authored mesh (exported from Wings 3D, Blender, etc.):
 ```js
 function main() {
@@ -384,7 +402,12 @@ const main = (p) => [partA(p), createBase(p)]
 module.exports = { main, getParameterDefinitions }
 ```
 
+For multi-file iteration via the MCP server, see "Multi-file Projects and the Require-Cache Trap" in the `jscad-mcp` skill — the evaluator only busts the entry file's require cache, so sub-module edits silently no-op without an explicit cache-bust.
+
+For shipping a multi-file project as a single openjscad.xyz link, see [`references/bundling.md`](references/bundling.md).
+
 ## Gear Train Spacing
+
 ```js
 // pitch_radius(mm_per_tooth, n) = mm_per_tooth * n / Math.PI / 2
 const d12 = pitch_radius(mpt, n1) + pitch_radius(mpt, n2)   // center-to-center
@@ -393,6 +416,7 @@ gear(mpt, n2, thickness, hole).rotateZ(-(1 + n2/2) * 360/n2).translate([0, d12, 
 ```
 
 ## ISO Thread Pattern
+
 Threads are helical polyhedrons. Each segment is a 6-vertex twisted prism:
 ```js
 polyhedron({
@@ -402,7 +426,10 @@ polyhedron({
 ```
 Key: `fn: 6` for hex heads/nuts. Thread pitch formula: `thread_depth = pitch * 0.866 / 2`.
 
+The modern API has `extrudeHelical` which subsumes the manual polyhedron build for most threading work.
+
 ## Section-Cut Debugging
+
 ```js
 if (params.cut === 'x') {
   result = result.cutByPlane(CSG.Plane.fromPoints([0,0,0],[1,0,0],[0,0,1]))
@@ -410,228 +437,13 @@ if (params.cut === 'x') {
 ```
 Expose as a `choice` param: `values: ['','x','-x','y','-y']`.
 
+For interactive slicing via the MCP, use the `slice` tool — no `getParameterDefinitions` plumbing needed.
+
 ## OpenSCAD Files in the JSCAD Ecosystem
+
 Files with `//!OpenSCAD` header are OpenSCAD syntax, not JavaScript. The `scad-deserializer` in JSCAD is intentionally disabled (`deserializers.js`) pending upstream fixes. These files cannot run in JSCAD as-is.
 
 OpenSCAD `difference()` = first child is positive, rest are subtracted. `scale([-1,1,1])` mirrors (negative factor). `eps = 0.001` scale trick prevents coplanar boolean artifacts.
-
-## Implicit Surfaces via Marching Cubes
-
-JSCAD has no built-in implicit-surface support, but `primitives.polyhedron({points, faces})` accepts arbitrary triangle meshes. Combined with a marching-cubes implementation, this unlocks gyroids, Schwarz P/D surfaces, and other triply-periodic minimal surfaces (TPMS).
-
-### The `|f|` kink trap
-
-To turn a signed implicit function `f(x,y,z)` (e.g., the gyroid `sin(x)cos(y) + sin(y)cos(z) + sin(z)cos(x)`) into a thickened solid (the region where `|f| < t`), the naive choice is to march `|f| - t` and pick iso-level 0. **This breaks marching cubes.** The `|.|` operator has a kink (non-differentiable point) along `f=0`. MC's linear edge interpolation assumes a smooth function; at the kink it picks wrong crossing points and produces non-manifold triangles. Visual symptom: the polyhedron renders as a solid cube or a chaotic triangle cloud rather than a coherent lattice.
-
-**Fix:** use `f(x,y,z)² - t²` instead. Same iso-surface (`|f| = t` ⇔ `f² = t²`), but smooth. MC produces a watertight mesh:
-
-```javascript
-const t = 0.6
-const field = (x, y, z) => {
-  const g = gyroidField(x, y, z, cellSize)
-  return g * g - t * t   // smooth replacement for |g| - t
-}
-```
-
-### Pattern: gyroid lattice cube
-
-```javascript
-const { primitives, booleans } = require('@jscad/modeling')
-const { polyhedron, cuboid } = primitives
-const { intersect } = booleans
-const { marchingCubes } = require('./lib/marching-cubes')   // standard MC with Paul Bourke tables
-
-const gyroidField = (x, y, z, cellSize) => {
-  const k = (2 * Math.PI) / cellSize
-  const X = x * k, Y = y * k, Z = z * k
-  return Math.sin(X) * Math.cos(Y) + Math.sin(Y) * Math.cos(Z) + Math.sin(Z) * Math.cos(X)
-}
-
-const main = (params = {}) => {
-  const p = { cellSize: 10, wallThreshold: 0.6, cubeSize: 40, resolution: 48, ...params }
-  const half = p.cubeSize / 2
-  const t = p.wallThreshold
-  const field = (x, y, z) => {
-    const g = gyroidField(x, y, z, p.cellSize)
-    return g * g - t * t
-  }
-
-  // March a slightly oversized box so we can clip cleanly with intersect
-  const pad = 2
-  const { positions, indices } = marchingCubes({
-    sampler: field,
-    bbox: [[-half - pad, -half - pad, -half - pad], [half + pad, half + pad, half + pad]],
-    resolution: p.resolution,
-    isoLevel: 0
-  })
-
-  if (positions.length === 0) return []
-  const lattice = polyhedron({ points: positions, faces: indices, orientation: 'outward' })
-  return intersect(lattice, cuboid({ size: [p.cubeSize, p.cubeSize, p.cubeSize] }))
-}
-```
-
-Use Paul Bourke's public-domain marching-cubes tables (`http://paulbourke.net/geometry/polygonise/`). Verify your implementation by marching a sphere (`f = √(x²+y²+z²) - 1`) and checking all vertices land near radius 1.
-
-## Cutaway Assembly Pattern (Multi-File Engine, Mechanism, etc.)
-
-For complex assemblies meant to show internals, do the cutaway subtraction **on the housing alone, not the assembled whole**. Cutting the assembled CSG of every part by a big slab is slow and can fail with intersecting geometry.
-
-```javascript
-// block.js — cutaway happens HERE, cheaply, on the housing alone
-const buildBlock = (p) => {
-  const body = cuboid({ size: [side, side, height] })
-  const bore = cylinder({ radius: bore/2, height: height + 2 })
-  const cutaway = translate([side/2 + 0.001, 0, 0],
-    cuboid({ size: [side/2 + 1, side + 2, height + 2] }))   // +X face removed
-  return subtract(body, union(bore, cutaway))
-}
-
-// piston.js, head.js, conrod.js, etc. — built whole; sit inside the cutaway naturally
-// assembly.js just unions everything via the parts map
-```
-
-The interior parts sit inside the already-cutaway housing. From any +X-side angle the camera sees right into the bore.
-
-## Slider-Crank Kinematics (For Animation Sweeps)
-
-Engine demos animate by sweeping `crankAngle`. The piston Z-position from crank angle:
-
-```javascript
-const r = stroke / 2
-const L = conrodLength
-const theta = (crankAngle * Math.PI) / 180
-const yp = r * Math.cos(theta) + Math.sqrt(L * L - (r * Math.sin(theta)) ** 2)
-// yp is the crown height above the crank center; subtract from TDC to get current z
-const crownZ = tdcCrownZ - ((r + L) - yp)
-```
-
-Crank pin position (for placing the conrod's big end):
-
-```javascript
-const pinY = r * Math.sin(theta)
-const pinZ = crankCenterZ + r * Math.cos(theta)
-```
-
-Sweep `crankAngle` 0° → 330° in 30° steps for a smooth 12-frame GIF.
-
-## Cycloidal Drive Profile
-
-The cycloidal disc profile (a hypocycloid that meshes with N pins on a circle) is bug-prone. Use the canonical Hugo-Elias form:
-
-```javascript
-// pinCount=N, pinCircleRadius=R, eccentricity=e, pinRadius=rp
-const cycloidProfile = ({ pinCount, pinCircleRadius, eccentricity, pinRadius, samples = 360 }) => {
-  const N = pinCount, R = pinCircleRadius, e = eccentricity, rp = pinRadius
-  const ratio = R / (e * N)
-  const pts = []
-  for (let i = 0; i < samples; i++) {
-    const t = (i / samples) * 2 * Math.PI
-    const psi = -Math.atan2(Math.sin((1 - N) * t), ratio - Math.cos((1 - N) * t))
-    const x =  R * Math.cos(t) - rp * Math.cos(t + psi) - e * Math.cos(N * t)
-    const y = -R * Math.sin(t) + rp * Math.sin(t + psi) + e * Math.sin(N * t)
-    pts.push([x, y])
-  }
-  return pts
-}
-```
-
-**Lobe count = N − 1** (a 12-pin housing produces an 11-lobe disc). If you get 22 lobes, you've used the wrong form (typically `cos(N·t/(N−1))` instead of `cos(N·t)`, or wrong sign on the `psi` term). Constraint: `e < R/N` to avoid self-intersection.
-
-Output-pin hole spacing matters too — the N−1 holes need to be far enough apart on their pitch circle to not overlap. If `2π·R_holes / (N−1) < 2·hole_radius`, they merge into a "flower" void instead of N−1 distinct bores.
-
-## Bundling Multi-File Models for Single-File Hosts
-
-`openjscad.xyz/?uri=<raw-github-url>` expects a single file. To ship a multi-file project as a browser demo, bundle the per-part modules into one file. Naive concatenation fails because each part file declares the same top-level `const { primitives, ... } = require('@jscad/modeling')` — duplicates cause `SyntaxError: Identifier 'primitives' has already been declared`.
-
-**Pattern:** wrap each per-part file body in an IIFE that re-requires `@jscad/modeling` locally and returns the module's exports object:
-
-```javascript
-const block = (() => {
-  const { primitives, booleans, transforms } = require('@jscad/modeling')
-  const { cuboid, cylinder } = primitives
-  // ... original block.js body ...
-  return { buildBlock }
-})()
-const { buildBlock } = block
-```
-
-Node caches `@jscad/modeling` after the first call, so the per-call requires are fast. The bundler script (`scripts/bundle-engine.js` in `jscad-mcp-example`) reads each part file, strips its `'use strict'`/`module.exports`/internal `require('./...')` lines, and wraps the rest in this IIFE.
-
-**Regex-based bundler limitations** (the `bundle-examples.js` flavor that destructures lib exports into top-level consts):
-
-The bundler in `jscad-mcp-example` matches lib exports with a regex roughly equivalent to `module\.exports\s*=\s*\{([^}]*)\}` and matches consumer requires with `const\s+\{([^}]*)\}\s*=\s*require\('\.\/[^']+'\)`. Two consequences:
-
-1. **Lib exports must be `module.exports = { name1, name2, name3 }` on a single line of identifiers only.** Any of the following will silently break the bundle (the regex captures content with internal commas as if it were a destructure pattern):
-   - Multi-line `module.exports = {\n  w: 120,\n  values: [...]\n}`
-   - Inline complex values (`values: [1, 2, 3, ...]` — every array element becomes a phantom "exported name")
-   - Renamed exports (`module.exports = { width: w, height: h }`)
-
-   Pattern: declare values as `const` above, then export with shorthand identifiers:
-   ```js
-   const w = 120
-   const h = 150
-   const values = [/* ...18000 numbers... */]
-   module.exports = { w, h, values }
-   ```
-
-2. **The consumer file must use bare destructure names matching the lib's exports.** The bundler strips your `const { ... } = require('./lib/x')` line entirely and emits its own destructure with the lib's raw export names. So this **breaks**:
-   ```js
-   const { w: WIDTH, values: DATA } = require('./lib/heightmap')   // BUNDLER WILL EMIT { w, values } -- WIDTH/DATA undefined
-   ```
-   Use bare names and rebuild the object locally if you want a namespace:
-   ```js
-   const { w, h, values } = require('./lib/heightmap')
-   const heightmap = { w, h, values }
-   ```
-
-Symptom of either: bundled `.jscad` is much smaller than expected, or evaluating it throws `ReferenceError: X is not defined`. Inspect the bundled output's first few lines to see what destructure the bundler emitted.
-
-## Image → 3D Heightmap (Lithophane) Pattern
-
-For demos whose *input* is a raster image (lithophane, embossed plaque, terrain panel), the data has to be embedded in the JS bundle because `.jscad` files run sandboxed at render time and can't `fs.readFile` the source image. Use a two-step pipeline:
-
-**Step 1 — preprocessor script** (committed, run manually when the input changes):
-
-```js
-// scripts/build-heightmap.js  — node-only, zero deps beyond ImageMagick
-const fs = require('fs'), cp = require('child_process'), os = require('os')
-const [,, inputImage, widthArg = '120'] = process.argv
-const W = parseInt(widthArg, 10)
-const tmp = `${os.tmpdir()}/_hm_${process.pid}.pgm`
-cp.execFileSync('convert', [inputImage, '-colorspace', 'Gray', '-resize', `${W}x`, '-depth', '8', tmp])
-
-// PGM P5 (binary): "P5\n[# comment\n]*W H\n255\n<binary bytes>"
-const buf = fs.readFileSync(tmp)
-let p = 0
-const ws = (b) => b === 0x20 || b === 0x0a || b === 0x09 || b === 0x0d
-const tok = () => {
-  while (p < buf.length && ws(buf[p])) p++
-  if (buf[p] === 0x23) { while (p < buf.length && buf[p] !== 0x0a) p++; return tok() }
-  const s = p; while (p < buf.length && !ws(buf[p])) p++
-  return buf.slice(s, p).toString('ascii')
-}
-if (tok() !== 'P5') throw new Error('expected binary PGM')
-const ww = +tok(), hh = +tok(), maxv = +tok()
-if (maxv !== 255) throw new Error('expected 8-bit PGM')
-p++  // single whitespace after maxval
-const values = Array.from(buf.slice(p, p + ww * hh))
-fs.unlinkSync(tmp)
-
-// Emit a bundler-safe lib module (see "Regex-based bundler limitations" above)
-const out = `'use strict'
-const w = ${ww}
-const h = ${hh}
-const source = ${JSON.stringify(require('path').basename(inputImage))}
-const values = [${values.join(',')}]
-module.exports = { w, h, source, values }
-`
-fs.writeFileSync('examples/lib/heightmap.js', out)
-```
-
-ImageMagick's PGM P5 (binary grayscale) is the right intermediate: 8 bits per pixel, trivial header, no compression, parseable in ~15 lines without npm dependencies. (Modern `magick` CLI replaces `convert` — `convert` still works but prints a deprecation warning.)
-
-**Step 2 — polyhedron from heightmap** (in the `.jscad` file): see the "Polyhedron from heightmap grid" recipe in the `jscad` skill. Key constraint: at ~18k+ grid samples, do NOT try `union` of one cuboid per cell — boolean unions of thousands of primitives are pathologically slow. Build a single `polyhedron({ points, faces })` directly.
 
 ## Key Gotchas
 
@@ -651,13 +463,21 @@ ImageMagick's PGM P5 (binary grayscale) is the right intermediate: 8 bits per pi
 - **`module.exports = { main, getParameterDefinitions }`** — must export both or UI has no param panel
 - **`scale(scalar, geom)`** = uniform scale; `scale([sx,sy,sz], geom)` = non-uniform
 - **`roundRadius` on roundedCylinder** consumes from height — actual straight section = `height - 2*roundRadius`
-- **MC of `|f|-t` is broken**: kink at f=0 produces non-manifold triangles. Use `f²-t²` (same iso-surface, smooth field). See "Implicit Surfaces via Marching Cubes" above.
-- **Cycloidal disc lobe count = N-1, not N**: if rendering shows 2(N-1) lobes the `e·cos(N·t/(N-1))` term is wrong (should be `e·cos(N·t)`). Verify with a unit test that counts radial peaks.
-- **Cycloidal output-pin holes overlap into a "flower"** when their pitch circle is too tight: spacing `2π·R/(N-1)` must exceed `2·hole_radius`.
 - **Multi-part assemblies render as monochrome blobs** without `colorize`. Apply per-part RGBA before union/assembly. The renderer's `overrideOriginalColors:false` keeps your colors.
-- **Cutaway on a fully-assembled CSG is slow/fragile**: subtract the cutaway region from the housing alone, then union the interior parts. They sit inside naturally.
-- **Slider-crank piston Z drift**: piston position must be re-frame against TDC, not raw `r·cos(θ) + √(L²−(r·sin θ)²)`. Subtract `((r+L) − yp)` from the desired TDC crown Z.
-- **Bundling multi-file modules to a single file**: naive concatenation duplicates top-level `const { primitives } = require(...)`. Wrap each part body in an IIFE (see "Bundling Multi-File Models").
-- **Bundler regex eats internal commas**: a lib's `module.exports = { ..., values: [1,2,3,...] }` makes a regex-based bundler treat each array element as a destructure name. Lib exports must be a single line of identifiers — declare values as `const` above. See "Regex-based bundler limitations".
-- **Bundler can't rename in the consumer**: `const { w: WIDTH } = require('./lib/x')` breaks because the bundler emits its own destructure with the lib's raw names. Use bare names in the consumer file.
-- **Heightmap demo: per-cell cuboid + union is too slow**: 100×120 grid = 12k cuboids; `union()` of that many primitives is pathologically slow (CSG boolean per pair). Build one `polyhedron({ points, faces })` directly — see the recipe in the `jscad` skill.
+
+### Gotchas covered in references
+
+These come up often enough to mention here, but the full diagnosis + fix lives in the topical file:
+
+- **MC of `|f|-t` is broken** — kink at f=0 → non-manifold triangles. Use `f²-t²`. See [`references/marching-cubes.md`](references/marching-cubes.md).
+- **Cycloidal disc lobe count = N-1, not N**. See [`references/cycloidal-drive.md`](references/cycloidal-drive.md).
+- **Cycloidal output-pin holes overlap into a "flower"** when their pitch circle is too tight. See [`references/cycloidal-drive.md`](references/cycloidal-drive.md).
+- **Cutaway on a fully-assembled CSG is slow/fragile** — subtract from the housing alone. See [`references/engine-and-kinematics.md`](references/engine-and-kinematics.md).
+- **Slider-crank piston Z drift** — re-frame against TDC, not raw `r·cos(θ) + √(...)`. See [`references/engine-and-kinematics.md`](references/engine-and-kinematics.md).
+- **Crankshaft journal needs a gap at the throw** for the webs to fit. See [`references/engine-and-kinematics.md`](references/engine-and-kinematics.md).
+- **Bundling multi-file modules** — IIFE-wrap each part body. See [`references/bundling.md`](references/bundling.md).
+- **Bundler regex eats internal commas** — lib exports must be single-line shorthand identifiers. See [`references/bundling.md`](references/bundling.md).
+- **Bundler can't rename in consumer** — bare destructure names only. See [`references/bundling.md`](references/bundling.md).
+- **Heightmap demo: per-cell cuboid + union is too slow** — build one `polyhedron({ points, faces })` directly. See [`references/lithophane.md`](references/lithophane.md).
+- **Pratt vs Howe — iso view can't tell them apart**. Render the front view. See [`references/ho-scale-models.md`](references/ho-scale-models.md).
+- **Parametric X-braces collapse to parallel slashes** with a single wrong sign flip. See [`references/ho-scale-models.md`](references/ho-scale-models.md).

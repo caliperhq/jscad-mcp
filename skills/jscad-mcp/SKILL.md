@@ -31,6 +31,20 @@ Render after: new primitive, dimension change, boolean operation added or remove
 
 Skip for: variable renames, comment edits, refactors that don't affect geometry output.
 
+## One Angle Is One Hypothesis
+
+A single render is **one hypothesis about whether the model is right** — never a guarantee. The cutaway engine in the demo gallery shipped to `main` *four* times with bugs that the previous round of inspection couldn't see, because each bug was hidden behind the one in front of it. Each round taught a discipline lesson worth carrying into every model.
+
+**Round 1 — more than two angles.** The conrod shipped lying flat on the floor along +Y, disconnected from the engine. The iso and the y-axis slice both looked plausible; the front view immediately exposed it (`atan2(dy, dz)` had been swapped to `atan2(dz, dy)`). *Lesson:* `take_standard_views` returns four for a reason. If you only describe iso + one slice, you have surveyed half the model.
+
+**Round 2 — re-inspect after every fix.** Once the conrod was vertical, a second mismatch became visible: the crankshaft journal was running along the wrong axis. Invisible while the conrod was the dominant bug; obvious once it wasn't. *Lesson:* when one part is moving, **all the parts that touch it can be wrong in ways the rendering can't display until the first part stops moving.** Take a fresh set of standard views after every fix, not just at the end of a session.
+
+**Round 3 — real-world references catch geometry that "looks plausible."** With the journal pointing right, three more bugs surfaced: the piston crown was computed *below* the wrist pin (sign error in the offset), the conrod bearings crossed the pins at a single line instead of being concentric (default cylinder axis was wrong), and the crank had no webs — the pin floated next to the journal with no physical connection. Each one read as "could be a styling choice" in isolation. *Lesson:* when the user has a real reference image (a measured part, a similar real-world assembly, a manufacturer's drawing), render against it. "Looks plausible" is a much weaker test than "matches this photo."
+
+**Round 4 — ask 'could this physically work?'** Even with proper webs, the crank still had a single continuous main journal cylinder passing *through* the offset webs — geometrically impossible to rotate. Static views all looked correct; the failure was kinematic. *Lesson:* "looks right from every angle" is necessary but not sufficient. Ask **could this part physically rotate / slide / engage / fit through its mating hole?** before declaring an assembly done.
+
+The same principle, four times: each iteration teaches you what you were unable to see in the previous one. Multi-angle inspection catches round 1. Re-inspection-after-every-fix catches round 2. A real-world reference catches round 3. Asking "would this work in the real world?" catches round 4. **Plan to iterate; don't plan to be right.**
+
 ## Tool Quick Reference
 
 | Situation | Tool |
@@ -239,6 +253,8 @@ To visualize relief in the render itself, use one of:
 - **A `slice`** perpendicular to the panel: shows the variable wall thickness directly. May be too thin to read at default zoom — zoom in or use a high `resolution`.
 
 Don't bump the printable defaults to make the render look better; ship the realistic thickness and use exaggerated renders only for documentation.
+
+For the full image-input pipeline (raster → grayscale PGM → JS heightmap module → polyhedron), see the `jscad-examples` skill's `references/lithophane.md`. The cache-bust gotcha for "I regenerated the heightmap and got the same render back" is covered above in "Same trap, different layer — lib data changes".
 
 ## Related Skills
 

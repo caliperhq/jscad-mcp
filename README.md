@@ -15,15 +15,19 @@ A **live web viewer** runs alongside the server. Every render Claude produces is
 
 ## Gallery
 
-| Cycloidal drive | Engine cutaway | Gyroid lattice |
-|---|---|---|
-| [![cycloidal](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/cycloidal_iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cycloidal-drive-reducer) | [![engine](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/engine_slice_y.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cutaway-4-stroke-engine) | [![gyroid](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/gyroid_iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#gyroid-lattice-cube) |
+[![engine crank-angle sweep](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/crank_sweep.gif)](https://caliperhq.dev/projects/jscad-mcp-example/gallery/)
 
-Engine crank-angle sweep — 12 frames stepping `crankAngle` 0° → 330°:
+> Single-cylinder 4-stroke engine, `crankAngle` stepping 0° → 350°. Each frame is one MCP render; the sweep was stitched with ffmpeg. Click for the full web gallery.
 
-![engine crank-angle sweep](https://raw.githubusercontent.com/caliperhq/jscad-mcp/main/docs/gallery/crank_sweep.gif)
+| Cycloidal drive | Cutaway engine | Gyroid lattice | Lofted vase |
+|:---:|:---:|:---:|:---:|
+| [![cycloidal](https://raw.githubusercontent.com/caliperhq/jscad-mcp-example/main/examples/screenshots/cycloidal/iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cycloidal-drive-reducer) | [![engine](https://raw.githubusercontent.com/caliperhq/jscad-mcp-example/main/demos/engine/screenshots/iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#cutaway-4-stroke-engine) | [![gyroid](https://raw.githubusercontent.com/caliperhq/jscad-mcp-example/main/examples/screenshots/gyroid/iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#gyroid-lattice-cube) | [![vase](https://raw.githubusercontent.com/caliperhq/jscad-mcp-example/main/examples/screenshots/vase/iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#lofted-vase) |
+| Named parts + `highlight` | `slice` cross-section | Marching-cubes TPMS | `extrudeFromSlices` loft |
+| **Threaded bolt + nut** | **Spur gear pair** | **HO truss bridge** | **Image → lithophane** |
+| [![thread](https://raw.githubusercontent.com/caliperhq/jscad-mcp-example/main/examples/screenshots/thread/iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#threaded-bolt--nut) | [![gears](https://raw.githubusercontent.com/caliperhq/jscad-mcp-example/main/examples/screenshots/gear_pair/iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#spur-gear-pair) | [![bridge](https://raw.githubusercontent.com/caliperhq/jscad-mcp-example/main/examples/screenshots/truss_bridge/iso.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#ho-scale-pratt-truss-bridge) | [![lithophane](https://raw.githubusercontent.com/caliperhq/jscad-mcp-example/main/examples/screenshots/lithophane/hero.png)](https://github.com/caliperhq/jscad-mcp-example/blob/main/EXAMPLES.md#image--lithophane) |
+| `extrudeHelical` threads | Meshing cosine teeth | Pratt diagonal rule | Photo → 3D heightmap |
 
-Full walkthroughs, iteration GIFs, and "Try in browser" links to openjscad.xyz live in **[caliperhq/jscad-mcp-example](https://github.com/caliperhq/jscad-mcp-example)** — or browse the rich web gallery at **[caliperhq.dev/projects/jscad-mcp-example/gallery/](https://caliperhq.dev/projects/jscad-mcp-example/gallery/)**.
+**13 demos with walkthroughs, iteration GIFs, parameters, and "Try in browser" links live in [caliperhq/jscad-mcp-example](https://github.com/caliperhq/jscad-mcp-example).** A richer web gallery — with per-demo pages — is at **[caliperhq.dev/projects/jscad-mcp-example/gallery/](https://caliperhq.dev/projects/jscad-mcp-example/gallery/)**.
 
 ## Requirements
 
@@ -128,19 +132,31 @@ See [`skills/README.md`](skills/README.md) for details.
 
 ## MCP Tools
 
+**Rendering**
+
 | Tool | Description |
 |------|-------------|
 | `take_standard_views` | Render iso, front, side, and top in one call |
 | `take_image` | Render from a specific azimuth, elevation, zoom, and target |
 | `slice` | Cross-section view: cut along x/y/z plane, camera auto-oriented |
+
+**Named parts**
+
+| Tool | Description |
+|------|-------------|
 | `list_parts` | List named parts with bounding boxes |
-| `highlight` | Render with one named part lit up, rest faded |
+| `highlight` | Render with one named part lit up, the rest faded |
 | `label_parts` | Render with a legend mapping part names to screen positions |
+
+**Session / diagnostics**
+
+| Tool | Description |
+|------|-------------|
 | `open_viewer` | Open the web viewer in the default browser |
 | `echo` | Verify the MCP connection |
 | `render_test` | Confirm the render pipeline works (no input needed) |
 
-All tools accept either `file` (absolute path to a `.jscad`) or `code` (inline JSCAD source). `take_image` and `take_standard_views` also accept optional `width` and `height` (pixels, default 800×600).
+All tools accept either `file` (absolute path to a `.jscad`) or `code` (inline JSCAD source). Render tools also accept optional `width` / `height` (pixels), a named `resolution` preset (`thumbnail`, `small`, `normal` (default, 800×600), `large`, `high-quality`), and `showGrid` / `showAxis` toggles.
 
 ## Web Viewer
 
